@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/local.properties
+local.properties
+/.idea/
+.DS_Store
+/build
+app/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Local SDK & JDK bundled binaries
+/android-sdk/
+/jdk17/
+*.zip
+*.log

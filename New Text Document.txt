@@ -1,0 +1,58 @@
+Act as a Principal Mobile Software Engineer and Embedded Systems Developer. Build a production-grade, highly polished Android Application for an End-of-Line (EOL) PCB Test Fixture used in electronics assembly lines.
+
+---
+
+### 1. APPLICATION VISION & UI DESIGN SYSTEM
+- **UI Aesthetic:** Deep dark mode inspired by the Bambu Lab P1S/X1C Touchscreen Display (Sleek, futuristic, highly visual, dark slate background `#121212`, card background `#1E1E1E`, primary accent `#00E676` green, warning `#FFD600` yellow, error `#FF5252` red).
+- **Target Device:** Lenovo Tab (Android OS, USB-C OTG enabled, touch-optimized with large touch targets >= 48dp).
+- **Navigation Layout:**
+  - **Left Sidebar:** Collapsible navigation with icons: [Run Test], [Manual Telemetry/Pin Diagnostics], [Test History & Sheets Queue], [Settings & Thresholds].
+  - **Top Status Bar:** Dynamic header displaying Operator ID, Active PCB Serial Number, USB Connection Status Badge ("CONNECTED" in green / "RECONNECTING..." in pulsating amber), and System Clock.
+  - **Main Dashboard View:**
+    - Top Action Bar: Large LOF Titan PCB Serial Number barcode input field + prominent "START AUTOMATED TEST" action button.
+    - Categorized Diagnostic Cards Grid:
+      1. Power & Quiescent Current (INA219 live mA reading + pass/fail indicator).
+      2. Motor Drivers M1–M4 (Individual status indicators).
+      3. Communication Ports (UART, SPI, I2C loopback statuses).
+      4. Sensor Ports (S1–S5 & Ultrasonic voltage high/low logic statuses).
+    - Live Telemetry Waveform: Real-time oscilloscope-style line graph showing current consumption (mA vs time) during test execution.
+
+---
+
+### 2. CORE ARCHITECTURE & SELF-HEALING USB SERIAL CONNECTION
+- **Communication Protocol:** Hardwired USB OTG Serial (`usb-serial-for-android` or Flutter `usb_serial`) communicating with an ESP32 Test Rig at 115200 Baud rate.
+- **Robustness & Self-Recovery (Mandatory):**
+  - Implement a background Heartbeat State Machine: Send `{"cmd": "PING"}` every 1000ms. Expect `{"resp": "PONG"}`.
+  - If 3 heartbeats fail or physical USB disconnection occurs:
+    - Automatically switch app state to `RECONNECTING` without crashing or blocking the main UI thread.
+    - Launch an active background reconnect poller searching for vendor/product USB IDs every 500ms.
+    - Upon re-plug, re-establish serial session, handshake with ESP32, and restore operational state seamlessly.
+
+---
+
+### 3. HARDWARE & TEST ROUTINE MAPPING (LOF TITAN S3 PCB)
+The app must command the ESP32 Test Rig to execute and parse tests matching this exact LOF Titan S3 pin hardware layout:
+- **UART Loopback:** TX (GPIO 17) to RX (GPIO 18)
+- **SPI Loopback:** SCK (GPIO 35), MOSI (GPIO 36), MISO (GPIO 37), CS (GPIO 38)
+- **I2C Bus Scan:** SCL (GPIO 8), SDA (GPIO 7)
+- **Motor Drivers:** M1 (GPIO 15/16), M2 (GPIO 13/14), M3 (GPIO 11/12), M4 (GPIO 9/10)
+- **Indicators:** LED1 (GPIO 47), LED2 (GPIO 48), Buzzer (GPIO 20)
+- **Sensor Inputs:** S1 (GPIO 2), S2 (GPIO 1), S3 (GPIO 3), S4 (GPIO 4), S5 (GPIO 5), Ultrasonic S1 (GPIO 6), Ultrasonic S2 (GPIO 19)
+
+---
+
+### 4. OPERATOR AUTHENTICATION & GOOGLE SHEETS LOGGING PIPELINE
+- **Operator Verification:** Require operator sign-in (Operator ID / PIN / Barcode scan) before unlocking test controls. Log Operator ID with every test record.
+- **Offline-First Data Pipeline:**
+  1. When a test completes, serialize all results (Timestamp, Operator ID, Serial Number, Overall Result, INA219 current readings, individual pin/bus results) into a local SQLite/Hive offline database queue.
+  2. A background worker reads from the queue and sends HTTP POST requests to a Google Apps Script Web App Endpoint.
+  3. Automatically retry failed requests on Wi-Fi drop; mark items as synced upon HTTP 200 `SUCCESS` response.
+
+---
+
+### 5. DELIVERABLE EXPECTATIONS
+1. **Full Application Codebase:** Cleanly modularized code structure (UI components, USB serial manager, database queue, API logger).
+2. **Google Apps Script Code:** Complete Google Apps Script snippet to receive test JSON payloads and append rows into Google Sheets.
+3. **Mock Data Mode:** Built-in simulation toggle button in settings to generate fake USB data & live current graphs for testing UI without physical hardware attached.
+
+Proceed to generate the full architecture, project files, and implementation step-by-step.

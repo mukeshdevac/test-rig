@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Bambu Lab Dark Theme Palette -->
+    <color name="bambu_bg_slate">#121212</color>
+    <color name="bambu_card_surface">#1E1E1E</color>
+    <color name="bambu_card_border">#2C2C2C</color>
+    <color name="bambu_accent_green">#00E676</color>
+    <color name="bambu_warning_yellow">#FFD600</color>
+    <color name="bambu_error_red">#FF5252</color>
+    <color name="bambu_text_primary">#F5F5F5</color>
+    <color name="bambu_text_secondary">#9E9E9E</color>
+    <color name="bambu_divider">#262626</color>
+</resources>

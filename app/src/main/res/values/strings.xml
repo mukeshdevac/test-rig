@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">LOF Titan EOL Fixture</string>
+    <string name="title_dashboard">Run Test</string>
+    <string name="title_diagnostics">Pin Diagnostics</string>
+    <string name="title_history">History &amp; Sheets Queue</string>
+    <string name="title_settings">Settings &amp; Thresholds</string>
+    <string name="usb_connected">CONNECTED</string>
+    <string name="usb_reconnecting">RECONNECTING…</string>
+    <string name="usb_disconnected">DISCONNECTED</string>
+    <string name="start_test">START AUTOMATED TEST</string>
+    <string name="abort_test">ABORT TEST</string>
+</resources>

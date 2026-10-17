@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LOF Titan S3 - EOL PCB Test Fixture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-viewport">
+    <div class="screen-container">
+      
+      <!-- App Main Shell -->
+      <div class="app-shell">
+        
+        <!-- Adaptive Left Navigation Rail (Visible on Tablets / Landscape / Desktop) -->
+        <nav class="nav-rail" id="navRail">
+          <div class="nav-top">
+            <div class="brand-badge">
+              <div class="logo-box">LT</div>
+              <div class="brand-text">
+                <span class="brand-title">TITAN S3</span>
+                <span class="brand-sub">EOL FIXTURE</span>
+              </div>
+            </div>
+
+            <div class="nav-items">
+              <button class="nav-btn active" id="tabRunTest" onclick="switchTab('run-test')">
+                <span class="nav-icon">▶</span>
+                <span class="nav-label">Run Test</span>
+              </button>
+
+              <button class="nav-btn" id="tabDiagnostics" onclick="switchTab('diagnostics')">
+                <span class="nav-icon">⚙</span>
+                <span class="nav-label">Diagnostics</span>
+              </button>
+
+              <button class="nav-btn" id="tabHistory" onclick="switchTab('history')">
+                <span class="nav-icon">☁</span>
+                <span class="nav-label">Queue</span>
+                <span class="queue-badge" id="railBadge" style="display:none;">0</span>
+              </button>
+
+              <button class="nav-btn" id="tabSettings" onclick="switchTab('settings')">
+                <span class="nav-icon">🛠</span>
+                <span class="nav-label">Settings</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="nav-bottom">
+            <button class="rail-toggle-btn" id="railToggle" onclick="toggleRail()" title="Collapse / Expand Sidebar">
+              ⮜
+            </button>
+          </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-viewport">
+          
+          <!-- Top Status Bar -->
+          <header class="top-status-bar">
+            <div class="status-left">
+              <button class="operator-badge logged-out" id="operatorBadgeBtn" onclick="openLoginModal()">
+                <span class="op-icon">👤</span>
+                <span class="op-text" id="operatorBadgeText">TAP TO LOGIN</span>
+              </button>
+            </div>
+
+            <div class="status-center">
+              <span class="status-label">ACTIVE PCB:</span>
+              <span class="status-serial" id="headerSerialDisplay">--</span>
+            </div>
+
+            <div class="status-right">
+              <!-- Stage 1: Tablet <-> Rig ESP32 Connection -->
+              <div class="usb-status-pill disconnected" id="rigStatusBadge" onclick="togglePhysicalUsb()" title="Tablet <-> Test Rig Connection (Click to Select USB)">
+                <span class="usb-dot"></span>
+                <span class="usb-icon">⚡</span>
+                <span class="usb-text" id="rigStatusText">RIG: OFFLINE</span>
+              </div>
+
+              <!-- Stage 2: Test Rig <-> Target Test PCB Bed Connection -->
+              <div class="usb-status-pill waiting" id="pcbStatusBadge" title="Test Rig <-> Target Test PCB Sensed">
+                <span class="usb-dot"></span>
+                <span class="usb-icon">🔲</span>
+                <span class="usb-text" id="pcbStatusText">PCB: WAITING RIG</span>
+              </div>
+
+              <div class="clock-display" id="clockDisplay">12:00:00</div>
+            </div>
+          </header>
+
+          <!-- TAB 1: RUN TEST (DASHBOARD) -->
+          <section class="tab-pane active" id="paneRunTest">
+            
+            <!-- Action Bar (Barcode Input + START TEST) -->
+            <div class="action-bar-card">
+              <div class="input-group">
+                <span class="input-icon">🔍</span>
+                <input type="text" id="barcodeInput" placeholder="Scan or Enter PCB Serial..." value="">
+                <button class="gen-sn-btn" onclick="generateNewSerial()" title="Generate Random SN">🎲 New</button>
+              </div>
+              <button class="action-btn start-btn disabled" id="startTestBtn" onclick="handleStartOrAbortTest()" disabled>
+                <span class="btn-icon">⚡</span>
+                <span class="btn-text" id="startTestBtnText">CONNECT HARDWARE RIG</span>
+              </button>
+            </div>
+
+            <!-- Disconnection Hardware Banner -->
+            <div class="hardware-alert-banner" id="hardwareAlertBanner">
+              <span class="alert-icon">⚠</span>
+              <span class="alert-text">NO PHYSICAL HARDWARE DETECTED. Connect USB cable to ESP32 test fixture.</span>
+              <button class="toggle-connect-btn" onclick="togglePhysicalUsb()">🔌 Select USB Port</button>
+            </div>
+
+            <!-- Categorized Diagnostic Cards Grid -->
+            <div class="diagnostics-grid">
+              
+              <!-- Card 1: Power & Quiescent Current -->
+              <div class="diag-card" id="cardPower">
+                <div class="card-header">
+                  <div>
+                    <h3 class="card-title">Power &amp; Quiescent</h3>
+                    <p class="card-sub">INA219 High-Side Probe</p>
+                  </div>
+                  <span class="status-chip idle" id="chipPower">DISCONNECTED</span>
+                </div>
+                <div class="card-body">
+                  <div class="metric-row">
+                    <span class="metric-label">Quiescent Draw</span>
+                    <span class="metric-val" id="valQuiescent">-- mA</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">Peak Current</span>
+                    <span class="metric-val" id="valPeak">-- mA</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">Bus Voltage</span>
+                    <span class="metric-val" id="valVoltage">-- V</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">Limit (&lt; 50mA)</span>
+                    <span class="metric-val" id="valPowerThreshold">--</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 2: Motor Drivers M1–M4 -->
+              <div class="diag-card" id="cardMotors">
+                <div class="card-header">
+                  <div>
+                    <h3 class="card-title">Motor Drivers</h3>
+                    <p class="card-sub">M1–M4 H-Bridge Logic</p>
+                  </div>
+                  <span class="status-chip idle" id="chipMotors">DISCONNECTED</span>
+                </div>
+                <div class="card-body">
+                  <div class="metric-row">
+                    <span class="metric-label">M1 (GPIO 15/16)</span>
+                    <span class="metric-val" id="valM1">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">M2 (GPIO 13/14)</span>
+                    <span class="metric-val" id="valM2">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">M3 (GPIO 11/12)</span>
+                    <span class="metric-val" id="valM3">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">M4 (GPIO 9/10)</span>
+                    <span class="metric-val" id="valM4">--</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 3: Communication Ports -->
+              <div class="diag-card" id="cardComms">
+                <div class="card-header">
+                  <div>
+                    <h3 class="card-title">Communication</h3>
+                    <p class="card-sub">UART / SPI / I2C Buses</p>
+                  </div>
+                  <span class="status-chip idle" id="chipComms">DISCONNECTED</span>
+                </div>
+                <div class="card-body">
+                  <div class="metric-row">
+                    <span class="metric-label">Hardwired UART</span>
+                    <span class="metric-val" id="valUart">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">SPI (35,36,37,38)</span>
+                    <span class="metric-val" id="valSpi">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">I2C (SCL 8, SDA 7)</span>
+                    <span class="metric-val" id="valI2c">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">Baud Rate</span>
+                    <span class="metric-val">115200 8N1</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 4: Sensor Inputs S1–S5 & Ultrasonic -->
+              <div class="diag-card" id="cardSensors">
+                <div class="card-header">
+                  <div>
+                    <h3 class="card-title">Sensor Ports</h3>
+                    <p class="card-sub">S1–S5 &amp; Ultrasonic</p>
+                  </div>
+                  <span class="status-chip idle" id="chipSensors">DISCONNECTED</span>
+                </div>
+                <div class="card-body">
+                  <div class="metric-row">
+                    <span class="metric-label">S1–S3 (GPIO 2,1,3)</span>
+                    <span class="metric-val" id="valS13">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">S4–S5 (GPIO 4,5)</span>
+                    <span class="metric-val" id="valS45">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">Ultrasonic 1 (GPIO 6)</span>
+                    <span class="metric-val" id="valUS1">--</span>
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">Ultrasonic 2 (GPIO 19)</span>
+                    <span class="metric-val" id="valUS2">--</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Live Telemetry Oscilloscope Waveform Card -->
+            <div class="waveform-card">
+              <div class="waveform-header">
+                <div>
+                  <h3 class="waveform-title">LIVE TELEMETRY WAVEFORM (INA219)</h3>
+                  <p class="waveform-sub">High-frequency dynamic current consumption profile (mA vs. Time) @ 60 FPS</p>
+                </div>
+                <div class="badges-row">
+                  <div class="telemetry-pill">
+                    <span class="lbl">CURRENT:</span>
+                    <span class="val" id="liveCurrentBadge">-- mA</span>
+                  </div>
+                  <div class="telemetry-pill">
+                    <span class="lbl">PEAK:</span>
+                    <span class="val" id="livePeakBadge">-- mA</span>
+                  </div>
+                  <div class="telemetry-pill">
+                    <span class="lbl">VOLTAGE:</span>
+                    <span class="val" id="liveVoltageBadge">-- V</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="canvas-wrapper">
+                <canvas id="oscilloscopeCanvas"></canvas>
+                <div class="threshold-label">THRESHOLD: 200 mA</div>
+              </div>
+            </div>
+
+          </section>
+
+          <!-- TAB 2: MANUAL DIAGNOSTICS -->
+          <section class="tab-pane" id="paneDiagnostics">
+            <div class="pane-content">
+              <div class="section-box">
+                <h3 class="section-title">MOTOR DRIVERS MANUAL PULSE</h3>
+                <p class="section-sub">Trigger individual H-bridge forward/reverse lines to verify motor phase currents</p>
+                <div class="manual-list">
+                  <div class="manual-item">
+                    <span class="pin-info">Motor M1 (GPIO 15 / 16)</span>
+                    <div class="btn-group">
+                      <button class="manual-btn" onclick="pulsePin(15, 'M1 INA')">PULSE INA (15)</button>
+                      <button class="manual-btn" onclick="pulsePin(16, 'M1 INB')">PULSE INB (16)</button>
+                    </div>
+                  </div>
+                  <div class="manual-item">
+                    <span class="pin-info">Motor M2 (GPIO 13 / 14)</span>
+                    <div class="btn-group">
+                      <button class="manual-btn" onclick="pulsePin(13, 'M2 INA')">PULSE INA (13)</button>
+                      <button class="manual-btn" onclick="pulsePin(14, 'M2 INB')">PULSE INB (14)</button>
+                    </div>
+                  </div>
+                  <div class="manual-item">
+                    <span class="pin-info">Motor M3 (GPIO 11 / 12)</span>
+                    <div class="btn-group">
+                      <button class="manual-btn" onclick="pulsePin(11, 'M3 INA')">PULSE INA (11)</button>
+                      <button class="manual-btn" onclick="pulsePin(12, 'M3 INB')">PULSE INB (12)</button>
+                    </div>
+                  </div>
+                  <div class="manual-item">
+                    <span class="pin-info">Motor M4 (GPIO 9 / 10)</span>
+                    <div class="btn-group">
+                      <button class="manual-btn" onclick="pulsePin(9, 'M4 INA')">PULSE INA (9)</button>
+                      <button class="manual-btn" onclick="pulsePin(10, 'M4 INB')">PULSE INB (10)</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="section-box">
+                <h3 class="section-title">INDICATOR &amp; BUZZER TEST</h3>
+                <p class="section-sub">Toggle visual LEDs and audible alert buzzer on LOF Titan S3</p>
+                <div class="action-grid-3">
+                  <button class="indicator-btn" onclick="pulsePin(47, 'LED 1')">
+                    <span class="ind-icon">💡</span>
+                    <span class="ind-label">LED 1 (GPIO 47)</span>
+                  </button>
+                  <button class="indicator-btn" onclick="pulsePin(48, 'LED 2')">
+                    <span class="ind-icon">💡</span>
+                    <span class="ind-label">LED 2 (GPIO 48)</span>
+                  </button>
+                  <button class="indicator-btn" onclick="pulsePin(20, 'BUZZER')">
+                    <span class="ind-icon">🔔</span>
+                    <span class="ind-label">BUZZER (GPIO 20)</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="section-box">
+                <h3 class="section-title">SENSOR PORTS LOGIC PROBE</h3>
+                <p class="section-sub">Query high/low input logic levels on sensor headers</p>
+                <div class="sensor-grid-cols">
+                  <button class="sensor-probe-btn" onclick="probeSensor(2, 'S1')">S1 (GPIO 2)</button>
+                  <button class="sensor-probe-btn" onclick="probeSensor(1, 'S2')">S2 (GPIO 1)</button>
+                  <button class="sensor-probe-btn" onclick="probeSensor(3, 'S3')">S3 (GPIO 3)</button>
+                  <button class="sensor-probe-btn" onclick="probeSensor(4, 'S4')">S4 (GPIO 4)</button>
+                  <button class="sensor-probe-btn" onclick="probeSensor(5, 'S5')">S5 (GPIO 5)</button>
+                  <button class="sensor-probe-btn" onclick="probeSensor(6, 'Ultrasonic 1')">US1 (GPIO 6)</button>
+                  <button class="sensor-probe-btn" onclick="probeSensor(19, 'Ultrasonic 2')">US2 (GPIO 19)</button>
+                </div>
+                <div class="probe-log" id="probeLog">Click any sensor or pin above to test...</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- TAB 3: SHEETS QUEUE & HISTORY -->
+          <section class="tab-pane" id="paneHistory">
+            <div class="pane-content">
+              <div class="queue-header-bar">
+                <div>
+                  <h3 class="section-title">OFFLINE TEST QUEUE &amp; GOOGLE SHEETS PIPELINE</h3>
+                  <p class="section-sub" id="queueSummaryText">Local SQLite cache | Automatic retry on Wi-Fi reconnect</p>
+                </div>
+                <div class="btn-group">
+                  <button class="btn-secondary" onclick="clearQueueHistory()">CLEAR</button>
+                  <button class="btn-primary" onclick="forceSyncNow()">☁ SYNC NOW</button>
+                </div>
+              </div>
+
+              <div class="queue-list" id="queueListContainer">
+                <!-- Dynamically populated rows -->
+              </div>
+            </div>
+          </section>
+
+          <!-- TAB 4: SETTINGS & THRESHOLDS -->
+          <section class="tab-pane" id="paneSettings">
+            <div class="pane-content">
+              
+              <div class="section-box">
+                <h3 class="section-title">GOOGLE APPS SCRIPT WEB APP ENDPOINT</h3>
+                <p class="section-sub">Deployed Web App URL for auto-appending rows to Google Sheets</p>
+                <div class="url-input-row">
+                  <input type="text" id="scriptUrlInput" class="full-input" placeholder="https://script.google.com/macros/s/AKfycb.../exec" value="https://script.google.com/macros/s/AKfycbyDemoEndpointLOFTitanEOL/exec">
+                  <button class="btn-primary" onclick="saveScriptUrl()">SAVE URL</button>
+                </div>
+                <div class="save-status" id="saveUrlStatus" style="display:none;">✔ Web App URL saved and verified.</div>
+              </div>
+
+              <div class="section-box">
+                <h3 class="section-title">LOF TITAN S3 HARDWARE SPECIFICATION</h3>
+                <div class="spec-table">
+                  <div class="spec-row"><span class="k">Rig Interface:</span><span class="v">USB-C OTG Serial @ 115200 Baud (8N1)</span></div>
+                  <div class="spec-row"><span class="k">Hardwired UART:</span><span class="v">Rig (TX:17, RX:18) &harr; Test PCB (RX, TX) @ 115200</span></div>
+                  <div class="spec-row"><span class="k">SPI Loopback:</span><span class="v">SCK (35), MOSI (36), MISO (37), CS (38)</span></div>
+                  <div class="spec-row"><span class="k">I2C Bus Scan:</span><span class="v">SCL (GPIO 8), SDA (GPIO 7)</span></div>
+                  <div class="spec-row"><span class="k">Motor Drivers:</span><span class="v">M1(15/16), M2(13/14), M3(11/12), M4(9/10)</span></div>
+                  <div class="spec-row"><span class="k">Indicators:</span><span class="v">LED1 (47), LED2 (48), Buzzer (20)</span></div>
+                  <div class="spec-row"><span class="k">Sensors:</span><span class="v">S1(2), S2(1), S3(3), S4(4), S5(5), US1(6), US2(19)</span></div>
+                  <div class="spec-row"><span class="k">Quiescent Limit:</span><span class="v">&lt; 50.0 mA (INA219 High-Side)</span></div>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- Adaptive Bottom Navigation Bar (Visible on Phones & Narrow Portrait Screens) -->
+          <nav class="bottom-nav-bar" id="bottomNavBar">
+            <button class="bnav-btn active" id="bnavRunTest" onclick="switchTab('run-test')">
+              <span class="bnav-icon">▶</span>
+              <span class="bnav-label">Run Test</span>
+            </button>
+            <button class="bnav-btn" id="bnavDiagnostics" onclick="switchTab('diagnostics')">
+              <span class="bnav-icon">⚙</span>
+              <span class="bnav-label">Diagnostics</span>
+            </button>
+            <button class="bnav-btn" id="bnavHistory" onclick="switchTab('history')">
+              <span class="bnav-icon">☁</span>
+              <span class="bnav-label">Queue</span>
+              <span class="queue-badge" id="bottomBadge" style="display:none;">0</span>
+            </button>
+            <button class="bnav-btn" id="bnavSettings" onclick="switchTab('settings')">
+              <span class="bnav-icon">🛠</span>
+              <span class="bnav-label">Settings</span>
+            </button>
+          </nav>
+
+        </main>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- OPERATOR AUTH MODAL -->
+  <div class="modal-backdrop" id="loginModal">
+    <div class="modal-card">
+      <h2 class="modal-title">OPERATOR AUTHENTICATION</h2>
+      <p class="modal-sub">Scan operator barcode badge or enter credentials to unlock test controls</p>
+      
+      <div class="form-group">
+        <label>Operator ID / Badge Barcode</label>
+        <input type="text" id="modalOperatorId" placeholder="e.g. OP-104 or scan badge" value="OP-982">
+      </div>
+
+      <div class="form-group">
+        <label>Security PIN</label>
+        <input type="password" id="modalPin" placeholder="Enter PIN" value="1234">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeLoginModal()">CANCEL</button>
+        <button class="btn-primary" onclick="confirmLogin()">AUTHENTICATE</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

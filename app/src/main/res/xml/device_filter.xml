@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Espressif ESP32-S2 / ESP32-S3 USB-JTAG/Serial / CDC -->
+    <usb-device vendor-id="12346" /> <!-- 0x303A -->
+    <!-- FTDI FT232 / FT2232 -->
+    <usb-device vendor-id="1027" />  <!-- 0x0403 -->
+    <!-- Silicon Labs CP2102 / CP2104 -->
+    <usb-device vendor-id="4292" />  <!-- 0x10C4 -->
+    <!-- QinHeng CH340 / CH341 -->
+    <usb-device vendor-id="6790" />  <!-- 0x1A86 -->
+    <!-- Prolific PL2303 -->
+    <usb-device vendor-id="1659" />  <!-- 0x067B -->
+</resources>
