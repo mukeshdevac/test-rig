@@ -82,6 +82,7 @@ fun MainContent(viewModel: TestFixtureViewModel) {
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
     val googleScriptUrl by viewModel.googleScriptUrl.collectAsState()
     val recentSerialLogs by viewModel.recentSerialLogs.collectAsState()
+    val provisioningStatus by viewModel.provisioningStatus.collectAsState()
 
     if (showAuthDialog) {
         OperatorAuthDialog(
@@ -199,6 +200,7 @@ fun MainContent(viewModel: TestFixtureViewModel) {
                             recentSerialLogs = recentSerialLogs,
                             attachedUsbDevices = attachedUsbDevices,
                             scanMessage = scanMessage,
+                            provisioningStatus = provisioningStatus,
                             onRequireLoginPrompt = { showAuthDialog = true },
                             onOpenHardwareDialog = { currentDestination = AppDestination.HARDWARE }
                         )
@@ -230,6 +232,7 @@ private fun ScreenSwitcher(
     recentSerialLogs: List<String>,
     attachedUsbDevices: List<com.loftitan.eoltestfixture.domain.model.UsbDeviceStatus>,
     scanMessage: String?,
+    provisioningStatus: com.loftitan.eoltestfixture.hardware.ProvisioningStatus,
     onRequireLoginPrompt: () -> Unit,
     onOpenHardwareDialog: () -> Unit = {}
 ) {
@@ -259,10 +262,12 @@ private fun ScreenSwitcher(
             attachedDevices = attachedUsbDevices,
             scanMessage = scanMessage,
             recentLogs = recentSerialLogs,
+            provisioningStatus = provisioningStatus,
             onScanAndConnect = { viewModel.scanAndConnectHardware() },
             onDisconnect = { viewModel.disconnectHardware() },
             onSendPing = { viewModel.sendHardwarePing() },
-            onRequestPermission = { devName -> viewModel.requestUsbPermission(devName) }
+            onRequestPermission = { devName -> viewModel.requestUsbPermission(devName) },
+            onAutoProvision = { viewModel.autoProvisionTestPcb() }
         )
 
         AppDestination.DIAGNOSTICS -> ManualDiagnosticsScreen(

@@ -105,6 +105,14 @@ class TestSuiteRunner(
                         json.optBoolean("uart_synced", false) ||
                         json.optString("uart_status").equals("ONLINE", ignoreCase = true)
                 _pcbConnectionState.value = if (isDocked) PcbConnectionState.DOCKED else PcbConnectionState.NOT_DETECTED
+
+                // Automatically bind the unique Bluetooth / Device name (e.g. LOF_TITAN_5F14)
+                val detectedName = json.optString("device_name").takeIf { it.isNotEmpty() && it != "NOT_DETECTED" && it != "DISCONNECTED" }
+                    ?: json.optString("ble_name").takeIf { it.isNotEmpty() }
+                if (detectedName != null && isDocked) {
+                    activeSerialNumber = detectedName
+                }
+
                 val voltage = json.optDouble("voltage_v", 0.0).toFloat()
                 val quiescentMa = json.optDouble("quiescent_ma", 0.0).toFloat()
                 if (isDocked && (voltage > 0f || quiescentMa > 0f)) {

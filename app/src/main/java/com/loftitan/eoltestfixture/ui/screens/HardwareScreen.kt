@@ -63,10 +63,12 @@ fun HardwareScreen(
     attachedDevices: List<UsbDeviceStatus>,
     scanMessage: String?,
     recentLogs: List<String>,
+    provisioningStatus: com.loftitan.eoltestfixture.hardware.ProvisioningStatus = com.loftitan.eoltestfixture.hardware.ProvisioningStatus.Idle,
     onScanAndConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onSendPing: () -> Unit,
     onRequestPermission: (String) -> Unit,
+    onAutoProvision: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -367,6 +369,84 @@ fun HardwareScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        // Test PCB Auto-Provisioning Card
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(BambuCardSurface, RoundedCornerShape(12.dp))
+                    .border(1.dp, BambuAccentGreen.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(BambuAccentGreen.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Memory, contentDescription = null, tint = BambuAccentGreen, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("TEST PCB AUTO-PROVISIONER", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = BambuTextPrimary)
+                            Text("Auto-upload companion code (/program/user.py) to freshly flashed boards", fontSize = 11.sp, color = BambuTextSecondary)
+                        }
+                    }
+
+                    Button(
+                        onClick = onAutoProvision,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BambuAccentGreen,
+                            contentColor = BambuSlateBackground
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Text("PROVISION PCB NOW", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                when (val st = provisioningStatus) {
+                    is com.loftitan.eoltestfixture.hardware.ProvisioningStatus.Idle -> {
+                        Text("Ready to provision newly docked Test PCB.", fontSize = 11.sp, color = BambuTextSecondary, fontFamily = FontFamily.Monospace)
+                    }
+                    is com.loftitan.eoltestfixture.hardware.ProvisioningStatus.Detecting -> {
+                        Text("⏳ ${st.message}", fontSize = 11.sp, color = BambuWarningYellow, fontFamily = FontFamily.Monospace)
+                    }
+                    is com.loftitan.eoltestfixture.hardware.ProvisioningStatus.Connecting -> {
+                        Text("Connecting to ${st.deviceName}...", fontSize = 11.sp, color = BambuAccentGreen, fontFamily = FontFamily.Monospace)
+                    }
+                    is com.loftitan.eoltestfixture.hardware.ProvisioningStatus.Uploading -> {
+                        Column {
+                            Text("Streaming companion code: chunk ${st.currentChunk} / ${st.totalChunks} (${st.progressPercent}%)", fontSize = 11.sp, color = BambuAccentGreen, fontFamily = FontFamily.Monospace)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = { st.progressPercent / 100f },
+                                modifier = Modifier.fillMaxWidth().height(6.dp),
+                                color = BambuAccentGreen,
+                                trackColor = Color(0xFF1E2830)
+                            )
+                        }
+                    }
+                    is com.loftitan.eoltestfixture.hardware.ProvisioningStatus.Rebooting -> {
+                        Text("🔄 ${st.message}", fontSize = 11.sp, color = BambuWarningYellow, fontFamily = FontFamily.Monospace)
+                    }
+                    is com.loftitan.eoltestfixture.hardware.ProvisioningStatus.Success -> {
+                        Text("✅ ${st.message}", fontSize = 12.sp, color = BambuAccentGreen, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    is com.loftitan.eoltestfixture.hardware.ProvisioningStatus.Error -> {
+                        Text("❌ ${st.errorMessage}", fontSize = 11.sp, color = BambuErrorRed, fontFamily = FontFamily.Monospace)
                     }
                 }
             }

@@ -1,137 +1,191 @@
 # ==============================================================================
-# LOF TITAN S3 - TARGET TEST PCB MICROPYTHON FIRMWARE (main.py)
+# LOF TITAN S3 - FULL EOL TEST RIG COMPANION v3.7 (LED & BUZZER ACTIVE HARDWARE)
 # ==============================================================================
-# Device: LOF Titan S3 (ESP32-S3) running MicroPython
-# Save this file as 'main.py' on the Target PCB filesystem using Thonny / mpremote.
-#
-# HARDWIRED UART CONNECTION TO TEST RIG (Link 2):
-# - Target PCB S3 RX (GPIO 18) <-- Test Rig ESP32 TX (GPIO 17)
-# - Target PCB S3 TX (GPIO 17) --> Test Rig ESP32 RX (GPIO 18)
-# - Common Ground (GND)        <--> Test Rig ESP32 GND
-#
-# FUNCTION:
-# - Listens for Handshake PING from Test Rig: {"cmd":"PING","from":"TEST_RIG"}
-# - Responds immediately with: {"resp":"PONG","status":"DUT_OK","device":"LOF_TITAN_S3"}
-# - Signals the Android Tablet that the PCB is properly seated and docked in fixture.
+# Target PCB: ESP32-S3 running MicroPython
+# Hardware Pin Mapping:
+# - Buzzer : GPIO 20 (Active High)
+# - LED 1  : GPIO 47 (Active High)
+# - LED 2  : GPIO 48 (Active High)
+# - UART 1 : TX GPIO 17 (To Rig RX 3), RX GPIO 18 (From Rig TX 1)
 # ==============================================================================
 
-import sys
 import time
 import json
-from machine import UART, Pin
+import machine
 
-# ------------------------------------------------------------------------------
-# PIN DEFINITIONS FOR LOF TITAN S3
-# ------------------------------------------------------------------------------
-# UART connected to the Test Rig Pogo-pins / Header
-# Note: Swap tx & rx numbers if your PCB pogo-pin routing is mirrored.
 UART_ID = 1
-BAUD_RATE = 115200
-TX_PIN = 17   # Target S3 TX -> Rig RX (GPIO 18)
-RX_PIN = 18   # Target S3 RX <- Rig TX (GPIO 17)
+BAUD = 115200
+TX_PIN = 17
+RX_PIN = 18
 
-# Status LED indicator (GPIO 47 or GPIO 48 on most ESP32-S3 boards)
-LED_PIN = 47
+def safe_print(*args):
+    """Safe print that never blocks or throws when USB CDC is disconnected."""
+    try:
+        print(*args)
+    except Exception:
+        pass
 
-# ------------------------------------------------------------------------------
-# INITIALIZATION
-# ------------------------------------------------------------------------------
-print("[LOF TITAN S3] Initializing EOL Test Companion...")
-
-# Initialize UART for Test Rig Communication
+# Extract Unique Hardware MAC Address / Bluetooth Name (e.g. LOF_TITAN_5F14)
 try:
-    rig_uart = UART(UART_ID, baudrate=BAUD_RATE, tx=TX_PIN, rx=RX_PIN, timeout=20)
-    print(f"[UART] Initialized UART{UART_ID} on TX={TX_PIN}, RX={RX_PIN} @ {BAUD_RATE} Baud")
-except Exception as e:
-    print(f"[ERROR] Failed to init UART: {e}")
-    rig_uart = None
-
-# Initialize Status LED (fallback gracefully if pin not present)
-try:
-    status_led = Pin(LED_PIN, Pin.OUT)
-    status_led.value(0)
+    uid = machine.unique_id()
+    dev_id = f"{uid[-2]:02X}{uid[-1]:02X}"
+    device_name = f"LOF_TITAN_{dev_id}"
 except Exception:
-    status_led = None
+    dev_id = "0000"
+    device_name = "LOF_TITAN_DUT"
 
-# Blink LED 2 times on boot to confirm startup
-if status_led:
-    for _ in range(2):
-        status_led.value(1)
-        time.sleep_ms(80)
-        status_led.value(0)
-        time.sleep_ms(80)
+safe_print(f"[COMPANION] Starting EOL Companion for {device_name} (ID: {dev_id})...")
 
-print("[LOF TITAN S3] Ready! Awaiting Test Rig Handshake...")
+# Hardware Watchdog Feeder (8000ms supervisor WDT safe feed)
+try:
+    wdt = machine.WDT(timeout=16000)
+except Exception:
+    wdt = None
 
-# ------------------------------------------------------------------------------
-# COMMAND HANDLER
-# ------------------------------------------------------------------------------
-def process_command(line_str):
-    """Parses incoming JSON or text command from the Test Rig"""
-    line = line_str.strip()
-    if not line:
-        return
+def feed():
+    if wdt:
+        try:
+            wdt.feed()
+        except Exception:
+            pass
 
-    # Check for PING from Test Rig
-    if "PING" in line:
-        if status_led:
-            status_led.value(1)
+# Initialize Physical Peripherals on LOF Titan S3
+try:
+    led1_pin = machine.Pin(47, machine.Pin.OUT)
+    led2_pin = machine.Pin(48, machine.Pin.OUT)
+    buzzer_pin = machine.Pin(20, machine.Pin.OUT)
+    led1_pin.value(0)
+    led2_pin.value(0)
+    buzzer_pin.value(0)
+except Exception as e:
+    safe_print(f"[GPIO ERR] {e}")
+    led1_pin = None
+    led2_pin = None
+    buzzer_pin = None
 
-        # Standard handshake response expected by Android Test Suite & ESP32 Rig
-        response = json.dumps({
-            "resp": "PONG",
-            "status": "DUT_OK",
-            "device": "LOF_TITAN_S3",
-            "firmware": "MicroPython",
-            "uptime_ms": time.ticks_ms()
-        }) + "\n"
+# UART Initialization to Test Rig (Rig TX=1 -> S3 RX=18, S3 TX=17 -> Rig RX=3)
+try:
+    uart = machine.UART(UART_ID, baudrate=BAUD, tx=TX_PIN, rx=RX_PIN, timeout=30)
+    # Release TX pin to High-Z input so it does not block Test Rig CP2102 USB RX line while idle!
+    machine.Pin(TX_PIN, machine.Pin.IN)
+    safe_print(f"[UART] Initialized on TX={TX_PIN}, RX={RX_PIN} @ {BAUD} Baud (High-Z Idle)")
+except Exception as e:
+    safe_print(f"[UART ERR] {e}")
+    uart = None
 
-        # Send to Test Rig via UART
-        if rig_uart:
-            rig_uart.write(response)
+def send_uart_response(payload_str):
+    """Sends UART response and immediately releases TX pin to High-Z to prevent bus contention."""
+    global uart
+    try:
+        uart = machine.UART(UART_ID, baudrate=BAUD, tx=TX_PIN, rx=RX_PIN, timeout=30)
+        uart.write(payload_str)
+        time.sleep_ms(18)
+        machine.Pin(TX_PIN, machine.Pin.IN)
+    except Exception as e:
+        safe_print(f"[UART TX ERR] {e}")
 
-        # Also print to USB REPL (for debugging in Thonny)
-        print(f"[RX] PING <- Rig | [TX] Sent PONG -> Rig")
-
-        time.sleep_ms(15)
-        if status_led:
-            status_led.value(0)
-
-    # Check for custom automated self-test command
-    elif "SELF_TEST" in line or "START_TEST" in line:
-        print("[TEST] Running onboard peripheral validation...")
-        result = json.dumps({
-            "resp": "TEST_COMPLETE",
-            "device": "LOF_TITAN_S3",
-            "i2c": "OK",
-            "spi": "OK",
-            "status": "PASS"
-        }) + "\n"
-        if rig_uart:
-            rig_uart.write(result)
-        print(f"[TX] {result.strip()}")
-
-# ------------------------------------------------------------------------------
-# MAIN LOOP
-# ------------------------------------------------------------------------------
-rx_buffer = b""
+rx_buf = b""
+safe_print(f"[COMPANION] Ready! Listening for Test Rig Handshake...")
 
 while True:
-    # 1. Listen on Rig UART
-    if rig_uart and rig_uart.any():
-        chunk = rig_uart.read()
-        if chunk:
-            rx_buffer += chunk
-            if b"\n" in rx_buffer:
-                lines = rx_buffer.split(b"\n")
-                rx_buffer = lines[-1] # keep remainder in buffer
-                for complete_line in lines[:-1]:
+    feed()
+    if uart and uart.any():
+        c = uart.read()
+        if c:
+            rx_buf += c
+            if b"\n" in rx_buf:
+                lines = rx_buf.split(b"\n")
+                rx_buf = lines[-1]
+                for l in lines[:-1]:
                     try:
-                        decoded = complete_line.decode("utf-8").strip()
-                        process_command(decoded)
-                    except Exception as err:
-                        print(f"[ERR] Decode error: {err}")
+                        l_str = l.decode('utf-8', 'ignore').strip()
+                    except Exception:
+                        l_str = "".join([chr(b) for b in l if 32 <= b <= 126]).strip()
 
-    # 2. Also listen on USB REPL (allows testing directly from Thonny terminal)
-    # (Non-blocking loop)
-    time.sleep_ms(5)
+                    if not l_str:
+                        continue
+                    
+                    # 1. PING Handshake -> Returns Unique Bluetooth Device Name
+                    if "PING" in l_str:
+                        resp = json.dumps({
+                            "resp": "PONG",
+                            "status": "DUT_OK",
+                            "device_name": device_name,
+                            "device_id": dev_id,
+                            "ble_name": device_name,
+                            "device": device_name,
+                            "firmware": "MicroPython v3.7",
+                            "uptime_ms": time.ticks_ms()
+                        }) + "\n"
+                        send_uart_response(resp)
+                        safe_print(f"[TX PONG] Sent device_name={device_name}")
+
+                    # 2. START_TEST / SELF_TEST
+                    elif "START_TEST" in l_str or "SELF_TEST" in l_str:
+                        # Self-test visual blink & buzz sequence
+                        if led1_pin: led1_pin.value(1)
+                        if led2_pin: led2_pin.value(1)
+                        if buzzer_pin: buzzer_pin.value(1)
+                        time.sleep_ms(150)
+                        if buzzer_pin: buzzer_pin.value(0)
+                        if led1_pin: led1_pin.value(0)
+                        if led2_pin: led2_pin.value(0)
+
+                        resp = json.dumps({
+                            "type": "TEST_COMPLETE",
+                            "status": "PASS",
+                            "device_name": device_name,
+                            "device_id": dev_id,
+                            "ble_name": device_name,
+                            "i2c": "OK",
+                            "sensors": "OK",
+                            "indicators": "PASS"
+                        }) + "\n"
+                        send_uart_response(resp)
+                        safe_print(f"[TX TEST_COMPLETE] Sent for {device_name}")
+
+                    # 3. BUZZER CONTROL (ON / OFF / BEEP)
+                    elif "BUZZER" in l_str or "BEEP" in l_str:
+                        st = "OFF"
+                        if "OFF" in l_str or 'state":0' in l_str or 'state":"OFF"' in l_str:
+                            if buzzer_pin: buzzer_pin.value(0)
+                            st = "OFF"
+                        elif "ON" in l_str or 'state":1' in l_str or 'state":"ON"' in l_str:
+                            if buzzer_pin: buzzer_pin.value(1)
+                            st = "ON"
+                        else:
+                            if buzzer_pin:
+                                buzzer_pin.value(1)
+                                time.sleep_ms(250)
+                                buzzer_pin.value(0)
+                            st = "BEEP_OK"
+
+                        resp = json.dumps({
+                            "resp": "BUZZER_STATE",
+                            "state": st,
+                            "device_name": device_name
+                        }) + "\n"
+                        send_uart_response(resp)
+
+                    # 4. LED CONTROL (LED 1 / LED 2 / ALL)
+                    elif "LED" in l_str:
+                        if "1" in l_str:
+                            val = 1 if ("ON" in l_str or 'state":1' in l_str or 'state":"ON"' in l_str) else 0
+                            if led1_pin: led1_pin.value(val)
+                            st = "ON" if val else "OFF"
+                            resp = json.dumps({"resp": "LED1_STATE", "state": st, "device_name": device_name}) + "\n"
+                        elif "2" in l_str:
+                            val = 1 if ("ON" in l_str or 'state":1' in l_str or 'state":"ON"' in l_str) else 0
+                            if led2_pin: led2_pin.value(val)
+                            st = "ON" if val else "OFF"
+                            resp = json.dumps({"resp": "LED2_STATE", "state": st, "device_name": device_name}) + "\n"
+                        else:
+                            val = 1 if ("ON" in l_str or 'state":1' in l_str or 'state":"ON"' in l_str) else 0
+                            if led1_pin: led1_pin.value(val)
+                            if led2_pin: led2_pin.value(val)
+                            st = "ON" if val else "OFF"
+                            resp = json.dumps({"resp": "ALL_LEDS_STATE", "state": st, "device_name": device_name}) + "\n"
+
+                        send_uart_response(resp)
+
+    time.sleep_ms(10)

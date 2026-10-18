@@ -44,6 +44,13 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
         heartbeatStateMachine = heartbeatStateMachine
     )
 
+    // Automated Test PCB (DUT) Provisioner for factory flashing & auto-upload
+    val dutAutoProvisioner = com.loftitan.eoltestfixture.hardware.DutAutoProvisioner(
+        application,
+        application.getSystemService(android.content.Context.USB_SERVICE) as android.hardware.usb.UsbManager
+    )
+    val provisioningStatus: StateFlow<com.loftitan.eoltestfixture.hardware.ProvisioningStatus> = dutAutoProvisioner.status
+
     // Operator Authentication
     private val _operatorId = MutableStateFlow("")
     val operatorId: StateFlow<String> = _operatorId.asStateFlow()
@@ -180,6 +187,17 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
                 put("gpio", gpio)
             }.toString()
             usbSerialManager.sendCommand(cmd)
+        }
+    }
+
+    fun autoProvisionTestPcb() {
+        viewModelScope.launch {
+            val ok = dutAutoProvisioner.autoProvisionConnectedDut()
+            if (ok) {
+                // Poll Rig to verify DUT status
+                kotlinx.coroutines.delay(12000)
+                usbSerialManager.sendCommand("{\"cmd\":\"CHECK_DUT\"}")
+            }
         }
     }
 
