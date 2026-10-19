@@ -192,10 +192,6 @@ void parseTargetIdentity(const String &jsonFrame) {
 
 bool checkTestPcbUartHandshake(bool verbose = false) {
   static int consecutiveUartFailures = 0;
-  while (Serial.available()) {
-    Serial.read();
-  }
-
   Serial.println("{\"cmd\":\"PING\",\"from\":\"TEST_RIG\"}");
   Serial.flush();
 
@@ -391,11 +387,15 @@ void setup() {
 }
 
 void loop() {
-  if (Serial.available()) {
-    String cmdLine = Serial.readStringUntil('\n');
-    cmdLine.trim();
-    if (cmdLine.length() > 0) {
-      if (cmdLine.indexOf("PING") >= 0 && cmdLine.indexOf("TEST_RIG") == -1) {
+  static String rxAccumulator = "";
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\n') {
+      rxAccumulator.trim();
+      if (rxAccumulator.length() > 0) {
+        String cmdLine = rxAccumulator;
+        rxAccumulator = "";
+        if (cmdLine.indexOf("PING") >= 0 && cmdLine.indexOf("TEST_RIG") == -1) {
         float v = 0.0f, c = 0.0f;
         readPower(v, c);
         Serial.print("{\"resp\":\"PONG\",\"timestamp\":");
@@ -514,6 +514,10 @@ void loop() {
           Serial.print(gpioPin);
           Serial.println("}");
         }
+      }
+    } else if (c != '\r') {
+      if (rxAccumulator.length() < 256) {
+        rxAccumulator += c;
       }
     }
   }

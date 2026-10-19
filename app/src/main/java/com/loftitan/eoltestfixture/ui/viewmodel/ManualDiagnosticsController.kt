@@ -51,9 +51,9 @@ class ManualDiagnosticsController(
         pollingJob = scope.launch {
             while (isActive && _isLiveMonitoring.value) {
                 pollButtons()
-                delay(180)
+                delay(120)
                 pollSensors()
-                delay(220)
+                delay(150)
             }
         }
     }
@@ -80,7 +80,12 @@ class ManualDiagnosticsController(
 
     fun handleIncomingFrame(frame: String) {
         try {
-            val json = JSONObject(frame)
+            val clean = frame.trim().let { raw ->
+                val start = raw.indexOf('{')
+                val end = raw.lastIndexOf('}')
+                if (start in 0 until end) raw.substring(start, end + 1) else raw
+            }
+            val json = JSONObject(clean)
             val resp = json.optString("resp")
 
             if (resp == "BUTTONS_STATE" || json.has("buttons")) {

@@ -160,7 +160,7 @@ private fun ButtonStatusRow(btn: LiveButtonStatus) {
                 .padding(horizontal = 10.dp, vertical = 4.dp)
         ) {
             Text(
-                text = if (btn.isPressed) "PRESSED (LOW)" else "RELEASED (HIGH)",
+                text = if (btn.isPressed) "PRESSED (GND / 0)" else "RELEASED (OPEN / 1)",
                 color = if (btn.isPressed) BambuSlateBackground else BambuTextSecondary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
