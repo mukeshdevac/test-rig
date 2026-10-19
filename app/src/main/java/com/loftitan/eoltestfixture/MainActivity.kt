@@ -61,6 +61,7 @@ fun MainContent(viewModel: TestFixtureViewModel) {
     var isRailExpanded by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
     var showHardwareDialog by remember { mutableStateOf(false) }
+
     val operatorId by viewModel.operatorId.collectAsState()
     val isOperatorLoggedIn by viewModel.isOperatorLoggedIn.collectAsState()
     val activeSerialNumber by viewModel.activeSerialNumber.collectAsState()
@@ -68,20 +69,7 @@ fun MainContent(viewModel: TestFixtureViewModel) {
     val pcbConnectionState by viewModel.pcbConnectionState.collectAsState()
     val attachedUsbDevices by viewModel.attachedUsbDevices.collectAsState()
     val scanMessage by viewModel.scanMessage.collectAsState()
-    val testStatus by viewModel.testStatus.collectAsState()
-    val currentTelemetry by viewModel.currentTelemetry.collectAsState()
-    val waveformPoints by viewModel.waveformPoints.collectAsState()
-    val powerDiagnostic by viewModel.powerDiagnostic.collectAsState()
-    val motorStatuses by viewModel.motorStatuses.collectAsState()
-    val commStatuses by viewModel.commStatuses.collectAsState()
-    val sensorStatuses by viewModel.sensorStatuses.collectAsState()
-    val indicatorStatuses by viewModel.indicatorStatuses.collectAsState()
-    val lastCompletedResult by viewModel.lastCompletedResult.collectAsState()
-    val allRecords by viewModel.allTestRecords.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
-    val googleScriptUrl by viewModel.googleScriptUrl.collectAsState()
-    val recentSerialLogs by viewModel.recentSerialLogs.collectAsState()
-    val provisioningStatus by viewModel.provisioningStatus.collectAsState()
 
     if (showAuthDialog) {
         OperatorAuthDialog(
@@ -112,7 +100,6 @@ fun MainContent(viewModel: TestFixtureViewModel) {
         val isCompact = maxWidth < 600.dp
 
         if (isCompact) {
-            // Adaptive Vertical Layout for compact phones / portrait screens
             Column(modifier = Modifier.fillMaxSize()) {
                 TopStatusBar(
                     operatorId = operatorId,
@@ -123,36 +110,9 @@ fun MainContent(viewModel: TestFixtureViewModel) {
                     onOperatorClick = { showAuthDialog = true },
                     onRigClick = { currentDestination = AppDestination.HARDWARE }
                 )
-
                 Box(modifier = Modifier.weight(1f)) {
-                    ScreenSwitcher(
-                        destination = currentDestination,
-                        viewModel = viewModel,
-                        activeSerialNumber = activeSerialNumber,
-                        testStatus = testStatus,
-                        connectionState = connectionState,
-                        pcbConnectionState = pcbConnectionState,
-                        isOperatorLoggedIn = isOperatorLoggedIn,
-                        currentTelemetry = currentTelemetry,
-                        waveformPoints = waveformPoints,
-                        powerDiagnostic = powerDiagnostic,
-                        motorStatuses = motorStatuses,
-                        commStatuses = commStatuses,
-                        sensorStatuses = sensorStatuses,
-                        indicatorStatuses = indicatorStatuses,
-                        lastCompletedResult = lastCompletedResult,
-                        allRecords = allRecords,
-                        pendingSyncCount = pendingSyncCount,
-                        googleScriptUrl = googleScriptUrl,
-                        recentSerialLogs = recentSerialLogs,
-                        attachedUsbDevices = attachedUsbDevices,
-                        scanMessage = scanMessage,
-                        provisioningStatus = provisioningStatus,
-                        onRequireLoginPrompt = { showAuthDialog = true },
-                        onOpenHardwareDialog = { currentDestination = AppDestination.HARDWARE }
-                    )
+                    ScreenSwitcher(currentDestination, viewModel, onOpenHardwareDialog = { currentDestination = AppDestination.HARDWARE })
                 }
-
                 BottomNavigationBarView(
                     currentDestination = currentDestination,
                     onDestinationSelected = { currentDestination = it },
@@ -160,7 +120,6 @@ fun MainContent(viewModel: TestFixtureViewModel) {
                 )
             }
         } else {
-            // Adaptive Horizontal Rail Layout for Tablets, Foldables, Landscape Phones
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRailView(
                     currentDestination = currentDestination,
@@ -169,7 +128,6 @@ fun MainContent(viewModel: TestFixtureViewModel) {
                     onToggleExpand = { isRailExpanded = !isRailExpanded },
                     pendingQueueCount = pendingSyncCount
                 )
-
                 Column(modifier = Modifier.fillMaxSize()) {
                     TopStatusBar(
                         operatorId = operatorId,
@@ -180,34 +138,8 @@ fun MainContent(viewModel: TestFixtureViewModel) {
                         onOperatorClick = { showAuthDialog = true },
                         onRigClick = { currentDestination = AppDestination.HARDWARE }
                     )
-
                     Box(modifier = Modifier.fillMaxSize()) {
-                        ScreenSwitcher(
-                            destination = currentDestination,
-                            viewModel = viewModel,
-                            activeSerialNumber = activeSerialNumber,
-                            testStatus = testStatus,
-                            connectionState = connectionState,
-                            pcbConnectionState = pcbConnectionState,
-                            isOperatorLoggedIn = isOperatorLoggedIn,
-                            currentTelemetry = currentTelemetry,
-                            waveformPoints = waveformPoints,
-                            powerDiagnostic = powerDiagnostic,
-                            motorStatuses = motorStatuses,
-                            commStatuses = commStatuses,
-                            sensorStatuses = sensorStatuses,
-                            indicatorStatuses = indicatorStatuses,
-                            lastCompletedResult = lastCompletedResult,
-                            allRecords = allRecords,
-                            pendingSyncCount = pendingSyncCount,
-                            googleScriptUrl = googleScriptUrl,
-                            recentSerialLogs = recentSerialLogs,
-                            attachedUsbDevices = attachedUsbDevices,
-                            scanMessage = scanMessage,
-                            provisioningStatus = provisioningStatus,
-                            onRequireLoginPrompt = { showAuthDialog = true },
-                            onOpenHardwareDialog = { currentDestination = AppDestination.HARDWARE }
-                        )
+                        ScreenSwitcher(currentDestination, viewModel, onOpenHardwareDialog = { currentDestination = AppDestination.HARDWARE })
                     }
                 }
             }
@@ -219,81 +151,109 @@ fun MainContent(viewModel: TestFixtureViewModel) {
 private fun ScreenSwitcher(
     destination: AppDestination,
     viewModel: TestFixtureViewModel,
-    activeSerialNumber: String,
-    testStatus: com.loftitan.eoltestfixture.domain.model.TestStatus,
-    connectionState: com.loftitan.eoltestfixture.domain.model.ConnectionState,
-    pcbConnectionState: com.loftitan.eoltestfixture.domain.model.PcbConnectionState,
-    isOperatorLoggedIn: Boolean,
-    currentTelemetry: com.loftitan.eoltestfixture.domain.model.TelemetryPoint,
-    waveformPoints: List<com.loftitan.eoltestfixture.domain.model.TelemetryPoint>,
-    powerDiagnostic: com.loftitan.eoltestfixture.domain.model.PowerDiagnostic,
-    motorStatuses: List<com.loftitan.eoltestfixture.domain.model.MotorStatus>,
-    commStatuses: List<com.loftitan.eoltestfixture.domain.model.CommPortStatus>,
-    sensorStatuses: List<com.loftitan.eoltestfixture.domain.model.SensorPortStatus>,
-    indicatorStatuses: List<com.loftitan.eoltestfixture.domain.model.IndicatorStatus>,
-    lastCompletedResult: com.loftitan.eoltestfixture.domain.model.CompleteTestResult?,
-    allRecords: List<com.loftitan.eoltestfixture.data.local.TestRecordEntity>,
-    pendingSyncCount: Int,
-    googleScriptUrl: String,
-    recentSerialLogs: List<String>,
-    attachedUsbDevices: List<com.loftitan.eoltestfixture.domain.model.UsbDeviceStatus>,
-    scanMessage: String?,
-    provisioningStatus: com.loftitan.eoltestfixture.hardware.ProvisioningStatus,
-    onRequireLoginPrompt: () -> Unit,
     onOpenHardwareDialog: () -> Unit = {}
 ) {
     when (destination) {
-        AppDestination.RUN_TEST -> DashboardScreen(
-            serialNumber = activeSerialNumber,
-            onSerialNumberChange = { viewModel.setSerialNumber(it) },
-            onStartTest = { viewModel.startTest() },
-            onAbortTest = { viewModel.abortTest() },
-            testStatus = testStatus,
-            connectionState = connectionState,
-            pcbConnectionState = pcbConnectionState,
-            lastCompletedResult = lastCompletedResult,
-            allRecords = allRecords,
-            pendingSyncCount = pendingSyncCount,
-            onSyncNow = { viewModel.triggerSyncNow() },
-            telemetryPoint = currentTelemetry,
-            waveformPoints = waveformPoints,
-            powerDiagnostic = powerDiagnostic,
-            motorStatuses = motorStatuses,
-            commStatuses = commStatuses,
-            sensorStatuses = sensorStatuses,
-            indicatorStatuses = indicatorStatuses,
-            onOpenHardwareDialog = onOpenHardwareDialog
-        )
+        AppDestination.RUN_TEST -> {
+            val serialNumber by viewModel.activeSerialNumber.collectAsState()
+            val testStatus by viewModel.testStatus.collectAsState()
+            val connectionState by viewModel.connectionState.collectAsState()
+            val pcbConnectionState by viewModel.pcbConnectionState.collectAsState()
+            val lastCompletedResult by viewModel.lastCompletedResult.collectAsState()
+            val allRecords by viewModel.allTestRecords.collectAsState()
+            val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+            val currentTelemetry by viewModel.currentTelemetry.collectAsState()
+            val waveformPoints by viewModel.waveformPoints.collectAsState()
+            val powerDiagnostic by viewModel.powerDiagnostic.collectAsState()
+            val motorStatuses by viewModel.motorStatuses.collectAsState()
+            val commStatuses by viewModel.commStatuses.collectAsState()
+            val sensorStatuses by viewModel.sensorStatuses.collectAsState()
+            val indicatorStatuses by viewModel.indicatorStatuses.collectAsState()
 
-        AppDestination.HARDWARE -> HardwareScreen(
-            connectionState = connectionState,
-            pcbConnectionState = pcbConnectionState,
-            attachedDevices = attachedUsbDevices,
-            scanMessage = scanMessage,
-            recentLogs = recentSerialLogs,
-            provisioningStatus = provisioningStatus,
-            onScanAndConnect = { viewModel.scanAndConnectHardware() },
-            onDisconnect = { viewModel.disconnectHardware() },
-            onSendPing = { viewModel.sendHardwarePing() },
-            onRequestPermission = { devName -> viewModel.requestUsbPermission(devName) },
-            onAutoProvision = { viewModel.autoProvisionTestPcb() }
-        )
-        AppDestination.DIAGNOSTICS -> ManualDiagnosticsScreen(
-            onTestPin = { gpio -> viewModel.manualPinTest(gpio) },
-            onPulseLed = { idx -> viewModel.pulseLed(idx) },
-            onToggleLed = { idx, st -> viewModel.setLedState(idx, st) },
-            onBeepBuzzer = { viewModel.beepBuzzer() },
-            onToggleBuzzer = { st -> viewModel.setBuzzerState(st) }
-        )
-        AppDestination.HISTORY_QUEUE -> TestHistoryQueueScreen(
-            records = allRecords,
-            pendingCount = pendingSyncCount,
-            onForceSync = { viewModel.triggerSyncNow() },
-            onClearHistory = { viewModel.clearHistory() }
-        )
-        AppDestination.SETTINGS -> SettingsScreen(
-            googleScriptUrl = googleScriptUrl,
-            onSaveGoogleScriptUrl = { viewModel.saveGoogleScriptUrl(it) }
-        )
+            DashboardScreen(
+                serialNumber = serialNumber,
+                onSerialNumberChange = { viewModel.setSerialNumber(it) },
+                onStartTest = { viewModel.startTest() },
+                onAbortTest = { viewModel.abortTest() },
+                testStatus = testStatus,
+                connectionState = connectionState,
+                pcbConnectionState = pcbConnectionState,
+                lastCompletedResult = lastCompletedResult,
+                allRecords = allRecords,
+                pendingSyncCount = pendingSyncCount,
+                onSyncNow = { viewModel.triggerSyncNow() },
+                telemetryPoint = currentTelemetry,
+                waveformPoints = waveformPoints,
+                powerDiagnostic = powerDiagnostic,
+                motorStatuses = motorStatuses,
+                commStatuses = commStatuses,
+                sensorStatuses = sensorStatuses,
+                indicatorStatuses = indicatorStatuses,
+                onOpenHardwareDialog = onOpenHardwareDialog
+            )
+        }
+        AppDestination.HARDWARE -> {
+            val connectionState by viewModel.connectionState.collectAsState()
+            val pcbConnectionState by viewModel.pcbConnectionState.collectAsState()
+            val attachedDevices by viewModel.attachedUsbDevices.collectAsState()
+            val scanMessage by viewModel.scanMessage.collectAsState()
+            val recentLogs by viewModel.recentSerialLogs.collectAsState()
+            val provisioningStatus by viewModel.provisioningStatus.collectAsState()
+
+            HardwareScreen(
+                connectionState = connectionState,
+                pcbConnectionState = pcbConnectionState,
+                attachedDevices = attachedDevices,
+                scanMessage = scanMessage,
+                recentLogs = recentLogs,
+                provisioningStatus = provisioningStatus,
+                onScanAndConnect = { viewModel.scanAndConnectHardware() },
+                onDisconnect = { viewModel.disconnectHardware() },
+                onSendPing = { viewModel.sendHardwarePing() },
+                onRequestPermission = { devName -> viewModel.requestUsbPermission(devName) },
+                onAutoProvision = { viewModel.autoProvisionTestPcb() }
+            )
+        }
+        AppDestination.DIAGNOSTICS -> {
+            val liveButtons by viewModel.liveButtons.collectAsState()
+            val liveSensors by viewModel.liveSensors.collectAsState()
+            val liveI2cScan by viewModel.liveI2cScan.collectAsState()
+            val isLiveMonitoring by viewModel.isLiveMonitoring.collectAsState()
+
+            ManualDiagnosticsScreen(
+                liveButtons = liveButtons,
+                liveSensors = liveSensors,
+                liveI2cScan = liveI2cScan,
+                isLiveMonitoring = isLiveMonitoring,
+                onToggleLiveMonitoring = { viewModel.toggleLiveMonitoring() },
+                onPollButtons = { viewModel.pollButtons() },
+                onPollSensors = { viewModel.pollSensors() },
+                onTriggerI2cScan = { viewModel.triggerI2cScan() },
+                onTestPin = { gpio -> viewModel.manualPinTest(gpio) },
+                onPulseLed = { idx -> viewModel.pulseLed(idx) },
+                onToggleLed = { idx, st -> viewModel.setLedState(idx, st) },
+                onBeepBuzzer = { viewModel.beepBuzzer() },
+                onToggleBuzzer = { st -> viewModel.setBuzzerState(st) }
+            )
+        }
+        AppDestination.HISTORY_QUEUE -> {
+            val allRecords by viewModel.allTestRecords.collectAsState()
+            val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+
+            TestHistoryQueueScreen(
+                records = allRecords,
+                pendingCount = pendingSyncCount,
+                onForceSync = { viewModel.triggerSyncNow() },
+                onClearHistory = { viewModel.clearHistory() }
+            )
+        }
+        AppDestination.SETTINGS -> {
+            val googleScriptUrl by viewModel.googleScriptUrl.collectAsState()
+
+            SettingsScreen(
+                googleScriptUrl = googleScriptUrl,
+                onSaveGoogleScriptUrl = { viewModel.saveGoogleScriptUrl(it) }
+            )
+        }
     }
 }

@@ -91,6 +91,17 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
     val scanMessage: StateFlow<String?> = usbSerialManager.scanMessage
     val recentSerialLogs: StateFlow<List<String>> = usbSerialManager.recentLogs
 
+    val manualDiagnostics = ManualDiagnosticsController(viewModelScope, usbSerialManager)
+    val liveButtons = manualDiagnostics.liveButtons
+    val liveSensors = manualDiagnostics.liveSensors
+    val liveI2cScan = manualDiagnostics.i2cScan
+    val isLiveMonitoring = manualDiagnostics.isLiveMonitoring
+
+    fun toggleLiveMonitoring() = manualDiagnostics.toggleLiveMonitoring()
+    fun pollButtons() = manualDiagnostics.pollButtons()
+    fun pollSensors() = manualDiagnostics.pollSensors()
+    fun triggerI2cScan() = manualDiagnostics.triggerI2cScan()
+
     init {
         initializeHardware()
         viewModelScope.launch {
@@ -213,7 +224,7 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
     fun pulseLed(ledIndex: Int) {
         viewModelScope.launch {
             usbSerialManager.sendCommand("LED${ledIndex}_ON")
-            kotlinx.coroutines.delay(400)
+            kotlinx.coroutines.delay(250)
             usbSerialManager.sendCommand("LED${ledIndex}_OFF")
         }
     }

@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,7 +33,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.loftitan.eoltestfixture.domain.model.LiveButtonStatus
+import com.loftitan.eoltestfixture.domain.model.LiveI2cScanStatus
+import com.loftitan.eoltestfixture.domain.model.LiveSensorStatus
 import com.loftitan.eoltestfixture.domain.model.PinMapping
+import com.loftitan.eoltestfixture.ui.screens.diagnostics.LiveButtonsCard
+import com.loftitan.eoltestfixture.ui.screens.diagnostics.LiveI2cScanCard
+import com.loftitan.eoltestfixture.ui.screens.diagnostics.LiveSensorsCard
 import com.loftitan.eoltestfixture.ui.theme.BambuAccentGreen
 import com.loftitan.eoltestfixture.ui.theme.BambuCardBorder
 import com.loftitan.eoltestfixture.ui.theme.BambuCardSurface
@@ -46,7 +51,15 @@ import com.loftitan.eoltestfixture.ui.theme.BambuWarningYellow
 
 @Composable
 fun ManualDiagnosticsScreen(
-    onTestPin: (Int) -> Unit,
+    liveButtons: List<LiveButtonStatus> = emptyList(),
+    liveSensors: List<LiveSensorStatus> = emptyList(),
+    liveI2cScan: LiveI2cScanStatus = LiveI2cScanStatus(),
+    isLiveMonitoring: Boolean = false,
+    onToggleLiveMonitoring: () -> Unit = {},
+    onPollButtons: () -> Unit = {},
+    onPollSensors: () -> Unit = {},
+    onTriggerI2cScan: () -> Unit = {},
+    onTestPin: (Int) -> Unit = {},
     onPulseLed: (Int) -> Unit = {},
     onToggleLed: (Int, Boolean) -> Unit = { _, _ -> },
     onBeepBuzzer: () -> Unit = {},
@@ -64,112 +77,120 @@ fun ManualDiagnosticsScreen(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-            // Section 1: Indicators & Buzzer Direct Controls
-            item {
-                ManualSectionCard(
-                    title = "INDICATOR & BUZZER TEST (TARGET PCB)",
-                    description = "Pulse or toggle visual status LEDs and audible buzzer on LOF Titan PCB"
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // LED 1 (Red / GPIO 47)
-                        IndicatorControlRow(
-                            label = "LED 1 RED (GPIO 47)",
-                            icon = Icons.Default.Lightbulb,
-                            activeColor = BambuErrorRed,
-                            isActive = led1Active,
-                            onPulse = { onPulseLed(1); onTestPin(PinMapping.Indicators.LED1_GPIO) },
-                            onToggle = { led1Active = !led1Active; onToggleLed(1, led1Active) }
-                        )
-
-                        // LED 2 (Green / GPIO 48)
-                        IndicatorControlRow(
-                            label = "LED 2 GREEN (GPIO 48)",
-                            icon = Icons.Default.Lightbulb,
-                            activeColor = BambuAccentGreen,
-                            isActive = led2Active,
-                            onPulse = { onPulseLed(2); onTestPin(PinMapping.Indicators.LED2_GPIO) },
-                            onToggle = { led2Active = !led2Active; onToggleLed(2, led2Active) }
-                        )
-
-                        // BUZZER (Alert / GPIO 20)
-                        IndicatorControlRow(
-                            label = "BUZZER (GPIO 20)",
-                            icon = Icons.Default.VolumeUp,
-                            activeColor = BambuWarningYellow,
-                            isActive = buzzerActive,
-                            onPulse = { onBeepBuzzer(); onTestPin(PinMapping.Indicators.BUZZER_GPIO) },
-                            onToggle = { buzzerActive = !buzzerActive; onToggleBuzzer(buzzerActive) }
-                        )
-                    }
-                }
-            }
-
-            // Section 2: Motor Drivers Manual Test
-            item {
-                ManualSectionCard(
-                    title = "MOTOR DRIVERS MANUAL PULSE",
-                    description = "Trigger individual H-bridge forward/reverse lines to verify motor phase currents"
-                ) {
-                    PinMapping.Motors.getAllDrivers().forEach { (motorId, gpios) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "$motorId (${gpios.joinToString(",")})",
-                                color = BambuTextPrimary,
-                                fontWeight = FontWeight.SemiBold,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = { onTestPin(gpios[0]) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = BambuCardSurface, contentColor = BambuAccentGreen),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, BambuAccentGreen.copy(alpha = 0.5f)),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) { Text("INA (${gpios[0]})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                                Button(
-                                    onClick = { onTestPin(gpios[1]) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = BambuCardSurface, contentColor = BambuAccentGreen),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, BambuAccentGreen.copy(alpha = 0.5f)),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) { Text("INB (${gpios[1]})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                            }
+        // Section 1: Indicators & Buzzer Direct Controls (Snappy single-dispatch)
+        item {
+            ManualSectionCard(
+                title = "INDICATOR & BUZZER TEST (TARGET PCB)",
+                description = "Direct control of Red LED (47), Green LED (48), and Buzzer (20)"
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    IndicatorControlRow(
+                        label = "LED 1 RED (GPIO 47)",
+                        icon = Icons.Default.Lightbulb,
+                        activeColor = BambuErrorRed,
+                        isActive = led1Active,
+                        onPulse = { onPulseLed(1) },
+                        onToggle = {
+                            led1Active = !led1Active
+                            onToggleLed(1, led1Active)
                         }
-                    }
+                    )
+
+                    IndicatorControlRow(
+                        label = "LED 2 GREEN (GPIO 48)",
+                        icon = Icons.Default.Lightbulb,
+                        activeColor = BambuAccentGreen,
+                        isActive = led2Active,
+                        onPulse = { onPulseLed(2) },
+                        onToggle = {
+                            led2Active = !led2Active
+                            onToggleLed(2, led2Active)
+                        }
+                    )
+
+                    IndicatorControlRow(
+                        label = "BUZZER (GPIO 20)",
+                        icon = Icons.Default.VolumeUp,
+                        activeColor = BambuWarningYellow,
+                        isActive = buzzerActive,
+                        onPulse = { onBeepBuzzer() },
+                        onToggle = {
+                            buzzerActive = !buzzerActive
+                            onToggleBuzzer(buzzerActive)
+                        }
+                    )
                 }
             }
+        }
 
-            // Section 3: Push Buttons (Active LOW with internal pull-up)
-            item {
-                ManualSectionCard(
-                    title = "PUSH BUTTONS (ACTIVE LOW 39-42)",
-                    description = "Query digital state of on-board push buttons (0 = Pressed, 1 = Released)"
-                ) {
-                    PinMapping.Buttons.getAllButtons().forEach { (btnName, gpio) ->
-                        ProbeRow(btnName, gpio, "READ BUTTON") { onTestPin(gpio) }
-                    }
-                }
-            }
+        // Section 2: Push Buttons Live Status (39, 40, 41, 42)
+        item {
+            LiveButtonsCard(
+                buttons = liveButtons,
+                isLiveMonitoring = isLiveMonitoring,
+                onToggleLiveMonitoring = onToggleLiveMonitoring,
+                onPollButtons = onPollButtons
+            )
+        }
 
-            // Section 4: Sensor Logic Port Probes
-            item {
-                ManualSectionCard(
-                    title = "SENSOR PORTS LOGIC PROBE (S1-S5, US)",
-                    description = "Query high/low input logic levels on sensor headers"
-                ) {
-                    PinMapping.Sensors.getAllSensors().forEach { (sensorName, gpio) ->
-                        ProbeRow(sensorName, gpio, "READ LOGIC") { onTestPin(gpio) }
+        // Section 3: Sensor Ports Logic & Raw Analog ADC (S1-S5, US)
+        item {
+            LiveSensorsCard(
+                sensors = liveSensors,
+                onPollSensors = onPollSensors
+            )
+        }
+
+        // Section 4: I2C Bus Scan
+        item {
+            LiveI2cScanCard(
+                scanStatus = liveI2cScan,
+                onTriggerScan = onTriggerI2cScan
+            )
+        }
+
+        // Section 5: Motor Drivers Manual Test
+        item {
+            ManualSectionCard(
+                title = "MOTOR DRIVERS MANUAL PULSE",
+                description = "Trigger H-bridge forward/reverse lines to verify motor phase currents"
+            ) {
+                PinMapping.Motors.getAllDrivers().forEach { (motorId, gpios) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "$motorId (${gpios.joinToString(",")})",
+                            color = BambuTextPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { onTestPin(gpios[0]) },
+                                colors = ButtonDefaults.buttonColors(containerColor = BambuCardSurface, contentColor = BambuAccentGreen),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BambuAccentGreen.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) { Text("INA (${gpios[0]})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                            Button(
+                                onClick = { onTestPin(gpios[1]) },
+                                colors = ButtonDefaults.buttonColors(containerColor = BambuCardSurface, contentColor = BambuAccentGreen),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BambuAccentGreen.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) { Text("INB (${gpios[1]})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        }
                     }
                 }
             }
         }
     }
+}
 
 @Composable
 private fun IndicatorControlRow(
@@ -260,30 +281,3 @@ fun ManualSectionCard(
         content()
     }
 }
-
-@Composable
-private fun ProbeRow(name: String, gpio: Int, actionText: String, onAction: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "$name -> GPIO $gpio",
-            color = BambuTextPrimary,
-            fontWeight = FontWeight.Medium,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp
-        )
-        OutlinedButton(
-            onClick = onAction,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BambuCardBorder),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Text(actionText, color = BambuTextSecondary, fontSize = 11.sp)
-        }
-    }
-}
-
