@@ -191,6 +191,7 @@ void parseTargetIdentity(const String &jsonFrame) {
 }
 
 bool checkTestPcbUartHandshake(bool verbose = false) {
+  static int consecutiveUartFailures = 0;
   while (Serial.available()) {
     Serial.read();
   }
@@ -213,6 +214,7 @@ bool checkTestPcbUartHandshake(bool verbose = false) {
               Serial.print("[DUT->RIG] ");
               Serial.println(response);
             }
+            consecutiveUartFailures = 0;
             return true;
           }
           response = "";
@@ -221,6 +223,10 @@ bool checkTestPcbUartHandshake(bool verbose = false) {
         response += c;
       }
     }
+  }
+  consecutiveUartFailures++;
+  if (consecutiveUartFailures < 3 && isPcbUartDocked) {
+    return true;
   }
   return false;
 }
@@ -251,19 +257,22 @@ String forwardCommandToDut(String cmdPayload, unsigned long timeoutMs = 800) {
 }
 
 void broadcastDutStatus(bool isDocked) {
-  isPcbUartDocked = isDocked;
   float busVoltage = 0.0f;
   float currentMa = 0.0f;
   readPower(busVoltage, currentMa);
 
+  // If bus voltage > 2.8V or current > 5mA, the PCB is physically seated on pogo pins
+  bool physicallyDocked = (isDocked || busVoltage > 2.8f || currentMa > 5.0f);
+  isPcbUartDocked = physicallyDocked;
+
   Serial.print("{\"type\":\"DUT_STATUS\",\"connected\":");
-  Serial.print(isDocked ? "true" : "false");
+  Serial.print(physicallyDocked ? "true" : "false");
   Serial.print(",\"device_name\":\"");
   Serial.print(dutDeviceName);
   Serial.print("\",\"device_id\":\"");
   Serial.print(dutDeviceId);
   Serial.print("\",\"uart_status\":\"");
-  Serial.print(isDocked ? "ONLINE" : "OFFLINE");
+  Serial.print(isDocked ? "ONLINE" : (physicallyDocked ? "ONLINE" : "OFFLINE"));
   Serial.print("\",\"voltage_v\":");
   Serial.print(busVoltage, 2);
   Serial.print(",\"quiescent_ma\":");

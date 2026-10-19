@@ -41,6 +41,7 @@ class TestSuiteRunner(
     // Target Test PCB Sensed on Rig Fixture Bed
     private val _pcbConnectionState = MutableStateFlow(PcbConnectionState.NOT_DETECTED)
     val pcbConnectionState: StateFlow<PcbConnectionState> = _pcbConnectionState.asStateFlow()
+    private var consecutiveMissedDockingPolls = 0
 
     private val _currentTelemetry = MutableStateFlow(TelemetryPoint(0L, 0f, 0f))
     val currentTelemetry: StateFlow<TelemetryPoint> = _currentTelemetry.asStateFlow()
@@ -98,34 +99,56 @@ class TestSuiteRunner(
                 return
             }
 
+            val resp = json.optString("resp")
+            if (resp.isNotEmpty() && resp != "DUT_TIMEOUT") {
+                consecutiveMissedDockingPolls = 0
+                _pcbConnectionState.value = PcbConnectionState.DOCKED
+                val devName = json.optString("device_name").takeIf { it.isNotEmpty() && it != "NOT_DETECTED" }
+                if (devName != null && activeSerialNumber.isBlank()) {
+                    activeSerialNumber = devName
+                    _detectedSerialNumber.value = devName
+                }
+            }
+
             val type = json.optString("type")
 
             // Target Test PCB Docking & Seating Detection from Test Rig ESP32 (Hardwired UART / In-Circuit Sense)
             if (type == "DUT_STATUS" || type == "PCB_STATUS") {
-                val isDocked = json.optBoolean("connected", false) ||
+                val voltage = json.optDouble("voltage_v", 0.0).toFloat()
+                val quiescentMa = json.optDouble("quiescent_ma", 0.0).toFloat()
+                val isUartDocked = json.optBoolean("connected", false) ||
                         json.optBoolean("seated", false) ||
                         json.optBoolean("docked", false) ||
                         json.optBoolean("uart_synced", false) ||
                         json.optString("uart_status").equals("ONLINE", ignoreCase = true)
-                _pcbConnectionState.value = if (isDocked) PcbConnectionState.DOCKED else PcbConnectionState.NOT_DETECTED
+                val hasPower = (voltage > 2.8f || quiescentMa > 3.0f)
+                val isDocked = isUartDocked || hasPower
+
+                if (isDocked) {
+                    consecutiveMissedDockingPolls = 0
+                    _pcbConnectionState.value = PcbConnectionState.DOCKED
+                } else {
+                    consecutiveMissedDockingPolls++
+                    if (consecutiveMissedDockingPolls >= 3) {
+                        _pcbConnectionState.value = PcbConnectionState.NOT_DETECTED
+                    }
+                }
 
                 // Automatically bind the unique Bluetooth / Device name (e.g. LOF_TITAN_5F14)
                 val detectedName = json.optString("device_name").takeIf { it.isNotEmpty() && it != "NOT_DETECTED" && it != "DISCONNECTED" }
                     ?: json.optString("ble_name").takeIf { it.isNotEmpty() }
-                if (detectedName != null && isDocked) {
+                if (detectedName != null && _pcbConnectionState.value == PcbConnectionState.DOCKED) {
                     activeSerialNumber = detectedName
                     _detectedSerialNumber.value = detectedName
                 }
 
-                val voltage = json.optDouble("voltage_v", 0.0).toFloat()
-                val quiescentMa = json.optDouble("quiescent_ma", 0.0).toFloat()
                 if (isDocked && (voltage > 0f || quiescentMa > 0f)) {
                     _powerDiagnostic.value = _powerDiagnostic.value.copy(
                         busVoltageV = voltage,
                         quiescentCurrentMa = quiescentMa,
                         status = TestStatus.IDLE
                     )
-                } else if (!isDocked && _testStatus.value != TestStatus.RUNNING) {
+                } else if (_pcbConnectionState.value == PcbConnectionState.NOT_DETECTED && _testStatus.value != TestStatus.RUNNING) {
                     _powerDiagnostic.value = PowerDiagnostic()
                 }
                 return
@@ -137,7 +160,8 @@ class TestSuiteRunner(
                 val voltageV = json.optDouble("voltage_v", 0.0).toFloat()
                 val timestampMs = json.optLong("timestamp_ms", System.currentTimeMillis() - testStartTime)
 
-                if (voltageV > 3.0f || currentMa > 0.5f) {
+                if (voltageV > 2.8f || currentMa > 3.0f) {
+                    consecutiveMissedDockingPolls = 0
                     _pcbConnectionState.value = PcbConnectionState.DOCKED
                 }
 
