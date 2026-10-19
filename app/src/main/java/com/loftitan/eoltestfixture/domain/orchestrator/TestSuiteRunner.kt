@@ -66,6 +66,9 @@ class TestSuiteRunner(
     private val _lastCompletedResult = MutableStateFlow<CompleteTestResult?>(null)
     val lastCompletedResult: StateFlow<CompleteTestResult?> = _lastCompletedResult.asStateFlow()
 
+    private val _detectedSerialNumber = MutableStateFlow("")
+    val detectedSerialNumber: StateFlow<String> = _detectedSerialNumber.asStateFlow()
+
     private var activeSerialNumber: String = ""
     private var activeOperatorId: String = ""
     private var testStartTime: Long = 0L
@@ -111,6 +114,7 @@ class TestSuiteRunner(
                     ?: json.optString("ble_name").takeIf { it.isNotEmpty() }
                 if (detectedName != null && isDocked) {
                     activeSerialNumber = detectedName
+                    _detectedSerialNumber.value = detectedName
                 }
 
                 val voltage = json.optDouble("voltage_v", 0.0).toFloat()

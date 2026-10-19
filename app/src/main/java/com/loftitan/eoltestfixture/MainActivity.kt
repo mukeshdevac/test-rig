@@ -78,6 +78,8 @@ fun MainContent(viewModel: TestFixtureViewModel) {
     val motorStatuses by viewModel.motorStatuses.collectAsState()
     val commStatuses by viewModel.commStatuses.collectAsState()
     val sensorStatuses by viewModel.sensorStatuses.collectAsState()
+    val indicatorStatuses by viewModel.indicatorStatuses.collectAsState()
+    val lastCompletedResult by viewModel.lastCompletedResult.collectAsState()
     val allRecords by viewModel.allTestRecords.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
     val googleScriptUrl by viewModel.googleScriptUrl.collectAsState()
@@ -140,12 +142,15 @@ fun MainContent(viewModel: TestFixtureViewModel) {
                         motorStatuses = motorStatuses,
                         commStatuses = commStatuses,
                         sensorStatuses = sensorStatuses,
+                        indicatorStatuses = indicatorStatuses,
+                        lastCompletedResult = lastCompletedResult,
                         allRecords = allRecords,
                         pendingSyncCount = pendingSyncCount,
                         googleScriptUrl = googleScriptUrl,
                         recentSerialLogs = recentSerialLogs,
                         attachedUsbDevices = attachedUsbDevices,
                         scanMessage = scanMessage,
+                        provisioningStatus = provisioningStatus,
                         onRequireLoginPrompt = { showAuthDialog = true },
                         onOpenHardwareDialog = { currentDestination = AppDestination.HARDWARE }
                     )
@@ -194,6 +199,8 @@ fun MainContent(viewModel: TestFixtureViewModel) {
                             motorStatuses = motorStatuses,
                             commStatuses = commStatuses,
                             sensorStatuses = sensorStatuses,
+                            indicatorStatuses = indicatorStatuses,
+                            lastCompletedResult = lastCompletedResult,
                             allRecords = allRecords,
                             pendingSyncCount = pendingSyncCount,
                             googleScriptUrl = googleScriptUrl,
@@ -226,6 +233,8 @@ private fun ScreenSwitcher(
     motorStatuses: List<com.loftitan.eoltestfixture.domain.model.MotorStatus>,
     commStatuses: List<com.loftitan.eoltestfixture.domain.model.CommPortStatus>,
     sensorStatuses: List<com.loftitan.eoltestfixture.domain.model.SensorPortStatus>,
+    indicatorStatuses: List<com.loftitan.eoltestfixture.domain.model.IndicatorStatus>,
+    lastCompletedResult: com.loftitan.eoltestfixture.domain.model.CompleteTestResult?,
     allRecords: List<com.loftitan.eoltestfixture.data.local.TestRecordEntity>,
     pendingSyncCount: Int,
     googleScriptUrl: String,
@@ -245,14 +254,17 @@ private fun ScreenSwitcher(
             testStatus = testStatus,
             connectionState = connectionState,
             pcbConnectionState = pcbConnectionState,
-            isOperatorLoggedIn = isOperatorLoggedIn,
-            onRequireLoginPrompt = onRequireLoginPrompt,
+            lastCompletedResult = lastCompletedResult,
+            allRecords = allRecords,
+            pendingSyncCount = pendingSyncCount,
+            onSyncNow = { viewModel.triggerSyncNow() },
             telemetryPoint = currentTelemetry,
             waveformPoints = waveformPoints,
             powerDiagnostic = powerDiagnostic,
             motorStatuses = motorStatuses,
             commStatuses = commStatuses,
             sensorStatuses = sensorStatuses,
+            indicatorStatuses = indicatorStatuses,
             onOpenHardwareDialog = onOpenHardwareDialog
         )
 
@@ -269,18 +281,15 @@ private fun ScreenSwitcher(
             onRequestPermission = { devName -> viewModel.requestUsbPermission(devName) },
             onAutoProvision = { viewModel.autoProvisionTestPcb() }
         )
-
         AppDestination.DIAGNOSTICS -> ManualDiagnosticsScreen(
             onTestPin = { gpio -> viewModel.manualPinTest(gpio) }
         )
-
         AppDestination.HISTORY_QUEUE -> TestHistoryQueueScreen(
             records = allRecords,
             pendingCount = pendingSyncCount,
             onForceSync = { viewModel.triggerSyncNow() },
             onClearHistory = { viewModel.clearHistory() }
         )
-
         AppDestination.SETTINGS -> SettingsScreen(
             googleScriptUrl = googleScriptUrl,
             onSaveGoogleScriptUrl = { viewModel.saveGoogleScriptUrl(it) }

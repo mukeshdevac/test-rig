@@ -51,11 +51,11 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
     )
     val provisioningStatus: StateFlow<com.loftitan.eoltestfixture.hardware.ProvisioningStatus> = dutAutoProvisioner.status
 
-    // Operator Authentication
-    private val _operatorId = MutableStateFlow("")
+    // Operator Authentication (Defaulted to LINE-1 for smooth factory throughput)
+    private val _operatorId = MutableStateFlow("LINE-1")
     val operatorId: StateFlow<String> = _operatorId.asStateFlow()
 
-    private val _isOperatorLoggedIn = MutableStateFlow(false)
+    private val _isOperatorLoggedIn = MutableStateFlow(true)
     val isOperatorLoggedIn: StateFlow<Boolean> = _isOperatorLoggedIn.asStateFlow()
 
     // Test Control States
@@ -73,6 +73,7 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
     val commStatuses: StateFlow<List<CommPortStatus>> = testSuiteRunner.commStatuses
     val sensorStatuses: StateFlow<List<SensorPortStatus>> = testSuiteRunner.sensorStatuses
     val indicatorStatuses: StateFlow<List<IndicatorStatus>> = testSuiteRunner.indicatorStatuses
+    val lastCompletedResult: StateFlow<com.loftitan.eoltestfixture.domain.model.CompleteTestResult?> = testSuiteRunner.lastCompletedResult
 
     // Persistence & Google Sheets Queue
     val allTestRecords: StateFlow<List<TestRecordEntity>> = repository.allRecordsFlow
@@ -92,6 +93,13 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         initializeHardware()
+        viewModelScope.launch {
+            testSuiteRunner.detectedSerialNumber.collect { detected ->
+                if (detected.isNotBlank() && _activeSerialNumber.value.isBlank()) {
+                    _activeSerialNumber.value = detected
+                }
+            }
+        }
     }
 
     fun initializeHardware() {
@@ -151,11 +159,16 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun startTest() {
-        if (!_isOperatorLoggedIn.value) return
-        if (_activeSerialNumber.value.isBlank()) return
+        if (_activeSerialNumber.value.isBlank()) {
+            val detected = testSuiteRunner.detectedSerialNumber.value
+            _activeSerialNumber.value = if (detected.isNotBlank()) detected else "LOF-" + System.currentTimeMillis().toString().takeLast(6)
+        }
+        val op = _operatorId.value.ifBlank { "LINE-1" }
+        _operatorId.value = op
+        _isOperatorLoggedIn.value = true
 
         viewModelScope.launch {
-            testSuiteRunner.startAutomatedTest(_activeSerialNumber.value, _operatorId.value)
+            testSuiteRunner.startAutomatedTest(_activeSerialNumber.value, op)
         }
     }
 
