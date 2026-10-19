@@ -372,6 +372,8 @@ fun HardwareScreen(
                     }
                 }
             }
+        }
+
         // Test PCB Auto-Provisioning Card
         item {
             Column(
@@ -432,7 +434,7 @@ fun HardwareScreen(
                             Text("Streaming companion code: chunk ${st.currentChunk} / ${st.totalChunks} (${st.progressPercent}%)", fontSize = 11.sp, color = BambuAccentGreen, fontFamily = FontFamily.Monospace)
                             Spacer(modifier = Modifier.height(6.dp))
                             androidx.compose.material3.LinearProgressIndicator(
-                                progress = { st.progressPercent / 100f },
+                                progress = st.progressPercent / 100f,
                                 modifier = Modifier.fillMaxWidth().height(6.dp),
                                 color = BambuAccentGreen,
                                 trackColor = Color(0xFF1E2830)

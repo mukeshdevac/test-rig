@@ -191,7 +191,9 @@ private fun SubsystemCard(
         TestStatus.PASS -> Triple("PASS", BambuAccentGreen, BambuAccentGreen.copy(alpha = 0.12f))
         TestStatus.FAIL -> Triple("FAIL", BambuErrorRed, BambuErrorRed.copy(alpha = 0.15f))
         TestStatus.RUNNING -> Triple("TESTING", Color(0xFF00A3FF), Color(0xFF00A3FF).copy(alpha = 0.12f))
+        TestStatus.WARNING -> Triple("WARN", BambuWarningYellow, BambuWarningYellow.copy(alpha = 0.15f))
         TestStatus.IDLE -> Triple("READY", BambuTextSecondary, BambuSlateBackground)
+        else -> Triple("READY", BambuTextSecondary, BambuSlateBackground)
     }
 
     Row(
