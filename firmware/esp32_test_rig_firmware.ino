@@ -501,10 +501,33 @@ void loop() {
         int gpioIndex = cmdLine.indexOf("\"gpio\":");
         if (gpioIndex > 0) {
           int gpioPin = cmdLine.substring(gpioIndex + 7).toInt();
-          pinMode(gpioPin, OUTPUT);
-          digitalWrite(gpioPin, HIGH);
-          delay(150);
-          digitalWrite(gpioPin, LOW);
+          if (gpioPin == 47) {
+            pinMode(PIN_LED1, OUTPUT);
+            digitalWrite(PIN_LED1, HIGH);
+            forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":1}", 200);
+            delay(350);
+            digitalWrite(PIN_LED1, LOW);
+            forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":0}", 200);
+          } else if (gpioPin == 48) {
+            pinMode(PIN_LED2, OUTPUT);
+            digitalWrite(PIN_LED2, HIGH);
+            forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":1}", 200);
+            delay(350);
+            digitalWrite(PIN_LED2, LOW);
+            forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":0}", 200);
+          } else if (gpioPin == 20) {
+            pinMode(PIN_BUZZER, OUTPUT);
+            digitalWrite(PIN_BUZZER, HIGH);
+            forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":1}", 200);
+            delay(250);
+            digitalWrite(PIN_BUZZER, LOW);
+            forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":0}", 200);
+          } else if (gpioPin < 40) {
+            pinMode(gpioPin, OUTPUT);
+            digitalWrite(gpioPin, HIGH);
+            delay(150);
+            digitalWrite(gpioPin, LOW);
+          }
           Serial.print("{\"resp\":\"PIN_TEST_OK\",\"gpio\":");
           Serial.print(gpioPin);
           Serial.println("}");

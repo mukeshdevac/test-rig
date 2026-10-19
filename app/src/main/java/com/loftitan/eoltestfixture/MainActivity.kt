@@ -36,12 +36,10 @@ import com.loftitan.eoltestfixture.ui.theme.LOFTitanEOLTestFixtureTheme
 import com.loftitan.eoltestfixture.ui.viewmodel.TestFixtureViewModel
 
 class MainActivity : ComponentActivity() {
-
     private val viewModel: TestFixtureViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
             LOFTitanEOLTestFixtureTheme {
                 MainContent(viewModel = viewModel)
@@ -63,7 +61,6 @@ fun MainContent(viewModel: TestFixtureViewModel) {
     var isRailExpanded by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
     var showHardwareDialog by remember { mutableStateOf(false) }
-
     val operatorId by viewModel.operatorId.collectAsState()
     val isOperatorLoggedIn by viewModel.isOperatorLoggedIn.collectAsState()
     val activeSerialNumber by viewModel.activeSerialNumber.collectAsState()
@@ -282,7 +279,11 @@ private fun ScreenSwitcher(
             onAutoProvision = { viewModel.autoProvisionTestPcb() }
         )
         AppDestination.DIAGNOSTICS -> ManualDiagnosticsScreen(
-            onTestPin = { gpio -> viewModel.manualPinTest(gpio) }
+            onTestPin = { gpio -> viewModel.manualPinTest(gpio) },
+            onPulseLed = { idx -> viewModel.pulseLed(idx) },
+            onToggleLed = { idx, st -> viewModel.setLedState(idx, st) },
+            onBeepBuzzer = { viewModel.beepBuzzer() },
+            onToggleBuzzer = { st -> viewModel.setBuzzerState(st) }
         )
         AppDestination.HISTORY_QUEUE -> TestHistoryQueueScreen(
             records = allRecords,

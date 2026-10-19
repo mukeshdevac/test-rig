@@ -195,11 +195,44 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
 
     fun manualPinTest(gpio: Int) {
         viewModelScope.launch {
-            val cmd = JSONObject().apply {
-                put("cmd", "PIN_TEST")
-                put("gpio", gpio)
-            }.toString()
-            usbSerialManager.sendCommand(cmd)
+            when (gpio) {
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Indicators.LED1_GPIO -> pulseLed(1)
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Indicators.LED2_GPIO -> pulseLed(2)
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Indicators.BUZZER_GPIO -> beepBuzzer()
+                else -> {
+                    val cmd = JSONObject().apply {
+                        put("cmd", "PIN_TEST")
+                        put("gpio", gpio)
+                    }.toString()
+                    usbSerialManager.sendCommand(cmd)
+                }
+            }
+        }
+    }
+
+    fun pulseLed(ledIndex: Int) {
+        viewModelScope.launch {
+            usbSerialManager.sendCommand("LED${ledIndex}_ON")
+            kotlinx.coroutines.delay(400)
+            usbSerialManager.sendCommand("LED${ledIndex}_OFF")
+        }
+    }
+
+    fun setLedState(ledIndex: Int, on: Boolean) {
+        viewModelScope.launch {
+            usbSerialManager.sendCommand(if (on) "LED${ledIndex}_ON" else "LED${ledIndex}_OFF")
+        }
+    }
+
+    fun beepBuzzer() {
+        viewModelScope.launch {
+            usbSerialManager.sendCommand("BEEP")
+        }
+    }
+
+    fun setBuzzerState(on: Boolean) {
+        viewModelScope.launch {
+            usbSerialManager.sendCommand(if (on) "BUZZER_ON" else "BUZZER_OFF")
         }
     }
 
