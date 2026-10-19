@@ -425,102 +425,64 @@ void loop() {
         digitalWrite(PIN_M1_B, LOW);
         Serial.println("{\"type\":\"TEST_ABORTED\"}");
       }
-      // Direct Hardware LED1 Controls (Controls Probe Pin 2 + Forwards to
-      // Target PCB)
-      else if (cmdLine.indexOf("LED1_ON") >= 0 ||
-               (cmdLine.indexOf("LED") >= 0 && cmdLine.indexOf("1") >= 0 &&
-                (cmdLine.indexOf("ON") >= 0 ||
-                 cmdLine.indexOf("state\":1") >= 0 ||
-                 cmdLine.indexOf("state\":\"ON") >= 0))) {
+      // Direct Hardware LED1 Controls (Controls Probe Pin 2 + Forwards to Target PCB)
+      else if (cmdLine.equals("LED1_ON") || cmdLine.indexOf("LED1_ON") >= 0) {
         pinMode(PIN_LED1, OUTPUT);
         digitalWrite(PIN_LED1, HIGH);
         forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":1}", 200);
         Serial.println("{\"resp\":\"LED1_STATE\",\"state\":\"ON\",\"pin\":2}");
-      } else if (cmdLine.indexOf("LED1_OFF") >= 0 ||
-                 (cmdLine.indexOf("LED") >= 0 && cmdLine.indexOf("1") >= 0 &&
-                  (cmdLine.indexOf("OFF") >= 0 ||
-                   cmdLine.indexOf("state\":0") >= 0 ||
-                   cmdLine.indexOf("state\":\"OFF") >= 0))) {
+      } else if (cmdLine.equals("LED1_OFF") || cmdLine.indexOf("LED1_OFF") >= 0) {
         pinMode(PIN_LED1, OUTPUT);
         digitalWrite(PIN_LED1, LOW);
         forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":0}", 200);
         Serial.println("{\"resp\":\"LED1_STATE\",\"state\":\"OFF\",\"pin\":2}");
       }
-      // Direct Hardware LED2 Controls (Controls Probe Pin 4 + Forwards to
-      // Target PCB)
-      else if (cmdLine.indexOf("LED2_ON") >= 0 ||
-               (cmdLine.indexOf("LED") >= 0 && cmdLine.indexOf("2") >= 0 &&
-                (cmdLine.indexOf("ON") >= 0 ||
-                 cmdLine.indexOf("state\":1") >= 0 ||
-                 cmdLine.indexOf("state\":\"ON") >= 0))) {
+      // Direct Hardware LED2 Controls (Controls Probe Pin 4 + Forwards to Target PCB)
+      else if (cmdLine.equals("LED2_ON") || cmdLine.indexOf("LED2_ON") >= 0) {
         pinMode(PIN_LED2, OUTPUT);
         digitalWrite(PIN_LED2, HIGH);
         forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":1}", 200);
         Serial.println("{\"resp\":\"LED2_STATE\",\"state\":\"ON\",\"pin\":4}");
-      } else if (cmdLine.indexOf("LED2_OFF") >= 0 ||
-                 (cmdLine.indexOf("LED") >= 0 && cmdLine.indexOf("2") >= 0 &&
-                  (cmdLine.indexOf("OFF") >= 0 ||
-                   cmdLine.indexOf("state\":0") >= 0 ||
-                   cmdLine.indexOf("state\":\"OFF") >= 0))) {
+      } else if (cmdLine.equals("LED2_OFF") || cmdLine.indexOf("LED2_OFF") >= 0) {
         pinMode(PIN_LED2, OUTPUT);
         digitalWrite(PIN_LED2, LOW);
         forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":0}", 200);
         Serial.println("{\"resp\":\"LED2_STATE\",\"state\":\"OFF\",\"pin\":4}");
       }
       // All LEDs
-      else if (cmdLine.indexOf("LEDS_ON") >= 0 ||
-               cmdLine.indexOf("ALL_LEDS_ON") >= 0 ||
-               cmdLine.indexOf("LED_ON") >= 0) {
+      else if (cmdLine.equals("LEDS_ON") || cmdLine.indexOf("LEDS_ON") >= 0 || cmdLine.indexOf("ALL_LEDS_ON") >= 0) {
         pinMode(PIN_LED1, OUTPUT);
         pinMode(PIN_LED2, OUTPUT);
         digitalWrite(PIN_LED1, HIGH);
         digitalWrite(PIN_LED2, HIGH);
-        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":\"ALL\",\"state\":1}",
-                            200);
+        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":\"ALL\",\"state\":1}", 200);
         Serial.println("{\"resp\":\"ALL_LEDS_STATE\",\"state\":\"ON\"}");
-      } else if (cmdLine.indexOf("LEDS_OFF") >= 0 ||
-                 cmdLine.indexOf("ALL_LEDS_OFF") >= 0 ||
-                 cmdLine.indexOf("LED_OFF") >= 0) {
+      } else if (cmdLine.equals("LEDS_OFF") || cmdLine.indexOf("LEDS_OFF") >= 0 || cmdLine.indexOf("ALL_LEDS_OFF") >= 0) {
         pinMode(PIN_LED1, OUTPUT);
         pinMode(PIN_LED2, OUTPUT);
         digitalWrite(PIN_LED1, LOW);
         digitalWrite(PIN_LED2, LOW);
-        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":\"ALL\",\"state\":0}",
-                            200);
+        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":\"ALL\",\"state\":0}", 200);
         Serial.println("{\"resp\":\"ALL_LEDS_STATE\",\"state\":\"OFF\"}");
       }
-      // Direct Hardware Buzzer Controls (Controls Probe Pin 19 + Forwards to
-      // Target PCB)
-      else if (cmdLine.indexOf("BUZZER_ON") >= 0 ||
-               (cmdLine.indexOf("BUZZER") >= 0 &&
-                (cmdLine.indexOf("\"ON\"") >= 0 ||
-                 cmdLine.indexOf("state\":1") >= 0 ||
-                 cmdLine.indexOf("state\":\"ON") >= 0))) {
+      // Direct Hardware Buzzer Controls (Controls Probe Pin 19 + Forwards to Target PCB)
+      else if (cmdLine.equals("BUZZER_ON") || cmdLine.indexOf("BUZZER_ON") >= 0) {
         pinMode(PIN_BUZZER, OUTPUT);
         digitalWrite(PIN_BUZZER, HIGH);
         forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":1}", 200);
-        Serial.println(
-            "{\"resp\":\"BUZZER_STATE\",\"state\":\"ON\",\"pin\":19}");
-      } else if (cmdLine.indexOf("BUZZER_OFF") >= 0 ||
-                 (cmdLine.indexOf("BUZZER") >= 0 &&
-                  (cmdLine.indexOf("\"OFF\"") >= 0 ||
-                   cmdLine.indexOf("state\":0") >= 0 ||
-                   cmdLine.indexOf("state\":\"OFF") >= 0))) {
+        Serial.println("{\"resp\":\"BUZZER_STATE\",\"state\":\"ON\",\"pin\":19}");
+      } else if (cmdLine.equals("BUZZER_OFF") || cmdLine.indexOf("BUZZER_OFF") >= 0) {
         pinMode(PIN_BUZZER, OUTPUT);
         digitalWrite(PIN_BUZZER, LOW);
         forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":0}", 200);
-        Serial.println(
-            "{\"resp\":\"BUZZER_STATE\",\"state\":\"OFF\",\"pin\":19}");
-      } else if (cmdLine.indexOf("BEEP") >= 0 ||
-                 (cmdLine.indexOf("BUZZER") >= 0 &&
-                  cmdLine.indexOf("BEEP") >= 0)) {
+        Serial.println("{\"resp\":\"BUZZER_STATE\",\"state\":\"OFF\",\"pin\":19}");
+      } else if (cmdLine.equals("BEEP") || cmdLine.indexOf("BEEP") >= 0) {
         pinMode(PIN_BUZZER, OUTPUT);
         digitalWrite(PIN_BUZZER, HIGH);
         forwardCommandToDut("{\"cmd\":\"BUZZER\",\"action\":\"BEEP\"}", 200);
         delay(250);
         digitalWrite(PIN_BUZZER, LOW);
-        Serial.println(
-            "{\"resp\":\"BUZZER_BEEP_OK\",\"pin\":19,\"duration_ms\":250}");
+        Serial.println("{\"resp\":\"BUZZER_BEEP_OK\",\"pin\":19,\"duration_ms\":250}");
       }
       // Direct Forwarding of Peripheral Commands to Target PCB
       else if (cmdLine.indexOf("BUZZER") >= 0 || cmdLine.indexOf("LED") >= 0 ||
