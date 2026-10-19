@@ -1,31 +1,61 @@
 # ==============================================================================
-# LOF TITAN S3 - FULL EOL TEST RIG COMPANION v3.7 (LED & BUZZER ACTIVE HARDWARE)
+# LOF TITAN S3 - EOL TEST RIG COMPANION v4.0 (OFFICIAL HARDWARE PIN MAPPING)
 # ==============================================================================
 # Target PCB: ESP32-S3 running MicroPython
-# Hardware Pin Mapping:
-# - Buzzer : GPIO 20 (Active High)
-# - LED 1  : GPIO 47 (Active High)
-# - LED 2  : GPIO 48 (Active High)
-# - UART 1 : TX GPIO 17 (To Rig RX 3), RX GPIO 18 (From Rig TX 1)
 # ==============================================================================
 
 import time
 import json
 import machine
 
-UART_ID = 1
-BAUD = 115200
-TX_PIN = 17
-RX_PIN = 18
+# --- OFFICIAL PIN DEFINITIONS ---
+PIN_LED_RED = 47
+PIN_LED_GREEN = 48
+PIN_BUZZER = 20
+PIN_I2C_SDA = 7
+PIN_I2C_SCL = 8
+
+PIN_BUTTON_1 = 39
+PIN_BUTTON_2 = 40
+PIN_BUTTON_3 = 41
+PIN_BUTTON_4 = 42
+ALL_BUTTON_PINS = (PIN_BUTTON_1, PIN_BUTTON_2, PIN_BUTTON_3, PIN_BUTTON_4)
+
+PIN_SENSOR_S1 = 2
+PIN_SENSOR_S2 = 1
+PIN_SENSOR_S3 = 3
+PIN_SENSOR_S4 = 4
+PIN_SENSOR_S5 = 5
+ALL_SENSOR_PINS = (PIN_SENSOR_S1, PIN_SENSOR_S2, PIN_SENSOR_S3, PIN_SENSOR_S4, PIN_SENSOR_S5)
+
+PIN_ULTRASONIC_S1 = 6
+PIN_ULTRASONIC_S2 = 19
+
+PIN_UART_RX = 18
+PIN_UART_TX = 17
+
+PIN_SPI_SCK = 35
+PIN_SPI_MOSI = 36
+PIN_SPI_MISO = 37
+PIN_SPI_CS = 38
+
+# Motor Drivers (4 Hardware Channels -> 6 Motor Connectors)
+MOTOR_PINS = {
+    "M1": (15, 16),
+    "M2": (13, 14),
+    "M3": (11, 12),
+    "M4": (9, 10),
+    "M5": (9, 10),
+    "M6": (11, 12)
+}
 
 def safe_print(*args):
-    """Safe print that never blocks or throws when USB CDC is disconnected."""
     try:
         print(*args)
     except Exception:
         pass
 
-# Extract Unique Hardware MAC Address / Bluetooth Name (e.g. LOF_TITAN_5F14)
+# Device Identity
 try:
     uid = machine.unique_id()
     dev_id = f"{uid[-2]:02X}{uid[-1]:02X}"
@@ -34,9 +64,9 @@ except Exception:
     dev_id = "0000"
     device_name = "LOF_TITAN_DUT"
 
-safe_print(f"[COMPANION] Starting EOL Companion for {device_name} (ID: {dev_id})...")
+safe_print(f"[COMPANION] LOF TITAN S3 EOL Companion v4.0 for {device_name}")
 
-# Hardware Watchdog Feeder (8000ms supervisor WDT safe feed)
+# Watchdog
 try:
     wdt = machine.WDT(timeout=16000)
 except Exception:
@@ -44,48 +74,97 @@ except Exception:
 
 def feed():
     if wdt:
-        try:
-            wdt.feed()
-        except Exception:
-            pass
+        try: wdt.feed()
+        except Exception: pass
 
-# Initialize Physical Peripherals on LOF Titan S3
+# Indicators & Buzzer
 try:
-    led1_pin = machine.Pin(47, machine.Pin.OUT)
-    led2_pin = machine.Pin(48, machine.Pin.OUT)
-    buzzer_pin = machine.Pin(20, machine.Pin.OUT)
-    led1_pin.value(0)
-    led2_pin.value(0)
-    buzzer_pin.value(0)
+    led_red = machine.Pin(PIN_LED_RED, machine.Pin.OUT, value=0)
+    led_green = machine.Pin(PIN_LED_GREEN, machine.Pin.OUT, value=0)
+    buzzer = machine.Pin(PIN_BUZZER, machine.Pin.OUT, value=0)
 except Exception as e:
-    safe_print(f"[GPIO ERR] {e}")
-    led1_pin = None
-    led2_pin = None
-    buzzer_pin = None
+    safe_print(f"[INIT INDICATORS ERR] {e}")
+    led_red, led_green, buzzer = None, None, None
 
-# UART Initialization to Test Rig (Rig TX=1 -> S3 RX=18, S3 TX=17 -> Rig RX=3)
+# Buttons (Active LOW with pull-up)
+btn_pins = {}
+for idx, p in enumerate(ALL_BUTTON_PINS, 1):
+    try:
+        btn_pins[f"btn_{idx}"] = machine.Pin(p, machine.Pin.IN, machine.Pin.PULL_UP)
+    except Exception:
+        pass
+
+# Sensors
+sensor_pins = {}
+for idx, p in enumerate(ALL_SENSOR_PINS, 1):
+    try:
+        sensor_pins[f"s{idx}"] = machine.Pin(p, machine.Pin.IN, machine.Pin.PULL_UP)
+    except Exception:
+        pass
 try:
-    uart = machine.UART(UART_ID, baudrate=BAUD, tx=TX_PIN, rx=RX_PIN, timeout=30)
-    # Release TX pin to High-Z input so it does not block Test Rig CP2102 USB RX line while idle!
-    machine.Pin(TX_PIN, machine.Pin.IN)
-    safe_print(f"[UART] Initialized on TX={TX_PIN}, RX={RX_PIN} @ {BAUD} Baud (High-Z Idle)")
+    sensor_pins["us1"] = machine.Pin(PIN_ULTRASONIC_S1, machine.Pin.IN, machine.Pin.PULL_UP)
+    sensor_pins["us2"] = machine.Pin(PIN_ULTRASONIC_S2, machine.Pin.IN, machine.Pin.PULL_UP)
+except Exception:
+    pass
+
+# UART to Test Rig (Hardwired: S3 TX=17 -> Rig RX=3, S3 RX=18 <- Rig TX=1)
+try:
+    uart = machine.UART(1, baudrate=115200, tx=PIN_UART_TX, rx=PIN_UART_RX, timeout=30)
+    machine.Pin(PIN_UART_TX, machine.Pin.IN)  # High-Z idle to prevent bus contention
 except Exception as e:
     safe_print(f"[UART ERR] {e}")
     uart = None
 
 def send_uart_response(payload_str):
-    """Sends UART response and immediately releases TX pin to High-Z to prevent bus contention."""
     global uart
     try:
-        uart = machine.UART(UART_ID, baudrate=BAUD, tx=TX_PIN, rx=RX_PIN, timeout=30)
+        uart = machine.UART(1, baudrate=115200, tx=PIN_UART_TX, rx=PIN_UART_RX, timeout=30)
         uart.write(payload_str)
         time.sleep_ms(18)
-        machine.Pin(TX_PIN, machine.Pin.IN)
+        machine.Pin(PIN_UART_TX, machine.Pin.IN)
     except Exception as e:
         safe_print(f"[UART TX ERR] {e}")
 
+def read_buttons():
+    res = {}
+    for k, p in btn_pins.items():
+        try: res[k] = 0 if p.value() == 0 else 1  # 0: Pressed, 1: Released
+        except Exception: res[k] = -1
+    return res
+
+def read_sensors():
+    res = {}
+    for k, p in sensor_pins.items():
+        try: res[k] = p.value()
+        except Exception: res[k] = -1
+    return res
+
+def scan_i2c():
+    try:
+        i2c = machine.I2C(0, scl=machine.Pin(PIN_I2C_SCL), sda=machine.Pin(PIN_I2C_SDA), freq=100000)
+        devs = i2c.scan()
+        return [f"0x{d:02X}" for d in devs]
+    except Exception:
+        return []
+
+def pulse_motor(m_key, duration_ms=100, direction=1):
+    pins = MOTOR_PINS.get(m_key.upper())
+    if not pins: return False
+    try:
+        p_a = machine.Pin(pins[0], machine.Pin.OUT)
+        p_b = machine.Pin(pins[1], machine.Pin.OUT)
+        if direction >= 1:
+            p_a.value(1); p_b.value(0)
+        else:
+            p_a.value(0); p_b.value(1)
+        time.sleep_ms(duration_ms)
+        p_a.value(0); p_b.value(0)
+        return True
+    except Exception:
+        return False
+
 rx_buf = b""
-safe_print(f"[COMPANION] Ready! Listening for Test Rig Handshake...")
+safe_print("[COMPANION] LOF TITAN S3 Ready!")
 
 while True:
     feed()
@@ -104,8 +183,8 @@ while True:
 
                     if not l_str:
                         continue
-                    
-                    # 1. PING Handshake -> Returns Unique Bluetooth Device Name
+
+                    # 1. PING / Handshake
                     if "PING" in l_str:
                         resp = json.dumps({
                             "resp": "PONG",
@@ -113,79 +192,109 @@ while True:
                             "device_name": device_name,
                             "device_id": dev_id,
                             "ble_name": device_name,
-                            "device": device_name,
-                            "firmware": "MicroPython v3.7",
+                            "firmware": "LOF_TITAN_S3_v4.0",
                             "uptime_ms": time.ticks_ms()
                         }) + "\n"
                         send_uart_response(resp)
-                        safe_print(f"[TX PONG] Sent device_name={device_name}")
 
-                    # 2. START_TEST / SELF_TEST
+                    # 2. START_TEST / Automated Test
                     elif "START_TEST" in l_str or "SELF_TEST" in l_str:
-                        # Self-test visual blink & buzz sequence
-                        if led1_pin: led1_pin.value(1)
-                        if led2_pin: led2_pin.value(1)
-                        if buzzer_pin: buzzer_pin.value(1)
+                        if led_red: led_red.value(1)
+                        if led_green: led_green.value(1)
+                        if buzzer: buzzer.value(1)
                         time.sleep_ms(150)
-                        if buzzer_pin: buzzer_pin.value(0)
-                        if led1_pin: led1_pin.value(0)
-                        if led2_pin: led2_pin.value(0)
+                        if buzzer: buzzer.value(0)
+                        if led_red: led_red.value(0)
+                        if led_green: led_green.value(0)
+
+                        for m in ["M1", "M2", "M3", "M4"]:
+                            pulse_motor(m, 80, 1)
 
                         resp = json.dumps({
                             "type": "TEST_COMPLETE",
                             "status": "PASS",
                             "device_name": device_name,
                             "device_id": dev_id,
-                            "ble_name": device_name,
-                            "i2c": "OK",
-                            "sensors": "OK",
+                            "buttons": read_buttons(),
+                            "sensors": read_sensors(),
+                            "i2c_devices": scan_i2c(),
                             "indicators": "PASS"
                         }) + "\n"
                         send_uart_response(resp)
-                        safe_print(f"[TX TEST_COMPLETE] Sent for {device_name}")
 
-                    # 3. BUZZER CONTROL (ON / OFF / BEEP)
+                    # 3. BUZZER Control
                     elif "BUZZER" in l_str or "BEEP" in l_str:
-                        st = "OFF"
-                        if "OFF" in l_str or 'state":0' in l_str or 'state":"OFF"' in l_str:
-                            if buzzer_pin: buzzer_pin.value(0)
+                        if "OFF" in l_str or 'state":0' in l_str:
+                            if buzzer: buzzer.value(0)
                             st = "OFF"
-                        elif "ON" in l_str or 'state":1' in l_str or 'state":"ON"' in l_str:
-                            if buzzer_pin: buzzer_pin.value(1)
+                        elif "ON" in l_str or 'state":1' in l_str:
+                            if buzzer: buzzer.value(1)
                             st = "ON"
                         else:
-                            if buzzer_pin:
-                                buzzer_pin.value(1)
+                            if buzzer:
+                                buzzer.value(1)
                                 time.sleep_ms(250)
-                                buzzer_pin.value(0)
+                                buzzer.value(0)
                             st = "BEEP_OK"
+                        send_uart_response(json.dumps({"resp": "BUZZER_STATE", "state": st, "device_name": device_name}) + "\n")
 
-                        resp = json.dumps({
-                            "resp": "BUZZER_STATE",
-                            "state": st,
-                            "device_name": device_name
-                        }) + "\n"
-                        send_uart_response(resp)
-
-                    # 4. LED CONTROL (LED 1 / LED 2 / ALL)
+                    # 4. LED Control (Red = LED 1 / Green = LED 2)
                     elif "LED" in l_str:
-                        if "1" in l_str:
-                            val = 1 if ("ON" in l_str or 'state":1' in l_str or 'state":"ON"' in l_str) else 0
-                            if led1_pin: led1_pin.value(val)
-                            st = "ON" if val else "OFF"
-                            resp = json.dumps({"resp": "LED1_STATE", "state": st, "device_name": device_name}) + "\n"
-                        elif "2" in l_str:
-                            val = 1 if ("ON" in l_str or 'state":1' in l_str or 'state":"ON"' in l_str) else 0
-                            if led2_pin: led2_pin.value(val)
-                            st = "ON" if val else "OFF"
-                            resp = json.dumps({"resp": "LED2_STATE", "state": st, "device_name": device_name}) + "\n"
+                        if "1" in l_str or "RED" in l_str:
+                            val = 1 if ("ON" in l_str or 'state":1' in l_str) else 0
+                            if led_red: led_red.value(val)
+                            send_uart_response(json.dumps({"resp": "LED1_STATE", "color": "RED", "state": "ON" if val else "OFF", "device_name": device_name}) + "\n")
+                        elif "2" in l_str or "GREEN" in l_str:
+                            val = 1 if ("ON" in l_str or 'state":1' in l_str) else 0
+                            if led_green: led_green.value(val)
+                            send_uart_response(json.dumps({"resp": "LED2_STATE", "color": "GREEN", "state": "ON" if val else "OFF", "device_name": device_name}) + "\n")
                         else:
-                            val = 1 if ("ON" in l_str or 'state":1' in l_str or 'state":"ON"' in l_str) else 0
-                            if led1_pin: led1_pin.value(val)
-                            if led2_pin: led2_pin.value(val)
-                            st = "ON" if val else "OFF"
-                            resp = json.dumps({"resp": "ALL_LEDS_STATE", "state": st, "device_name": device_name}) + "\n"
+                            val = 1 if ("ON" in l_str or 'state":1' in l_str) else 0
+                            if led_red: led_red.value(val)
+                            if led_green: led_green.value(val)
+                            send_uart_response(json.dumps({"resp": "ALL_LEDS_STATE", "state": "ON" if val else "OFF", "device_name": device_name}) + "\n")
 
-                        send_uart_response(resp)
+                    # 5. BUTTONS Query (Push buttons 39, 40, 41, 42)
+                    elif "BUTTON" in l_str:
+                        send_uart_response(json.dumps({
+                            "resp": "BUTTONS_STATE",
+                            "buttons": read_buttons(),
+                            "device_name": device_name
+                        }) + "\n")
+
+                    # 6. SENSORS Query (S1-S5, Ultrasonic)
+                    elif "SENSOR" in l_str:
+                        send_uart_response(json.dumps({
+                            "resp": "SENSORS_STATE",
+                            "sensors": read_sensors(),
+                            "device_name": device_name
+                        }) + "\n")
+
+                    # 7. MOTOR Pulse Test
+                    elif "MOTOR" in l_str:
+                        m_name = "M1"
+                        for m_candidate in ["M1", "M2", "M3", "M4", "M5", "M6"]:
+                            if m_candidate in l_str:
+                                m_name = m_candidate
+                                break
+                        ok = pulse_motor(m_name, 100, 1)
+                        send_uart_response(json.dumps({
+                            "resp": "MOTOR_PULSE_OK" if ok else "MOTOR_ERR",
+                            "motor": m_name,
+                            "pins": list(MOTOR_PINS.get(m_name, ())),
+                            "device_name": device_name
+                        }) + "\n")
+
+                    # 8. I2C Bus Scan
+                    elif "I2C" in l_str:
+                        devs = scan_i2c()
+                        send_uart_response(json.dumps({
+                            "resp": "I2C_SCAN_OK",
+                            "devices": devs,
+                            "count": len(devs),
+                            "sda": PIN_I2C_SDA,
+                            "scl": PIN_I2C_SCL,
+                            "device_name": device_name
+                        }) + "\n")
 
     time.sleep_ms(10)

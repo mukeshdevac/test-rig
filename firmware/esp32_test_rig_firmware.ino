@@ -524,7 +524,7 @@ void loop() {
       }
       // Direct Forwarding of Peripheral Commands to Target PCB
       else if (cmdLine.indexOf("BUZZER") >= 0 || cmdLine.indexOf("LED") >= 0 ||
-               cmdLine.indexOf("MOTOR") >= 0 ||
+               cmdLine.indexOf("MOTOR") >= 0 || cmdLine.indexOf("BUTTON") >= 0 ||
                cmdLine.indexOf("SENSOR") >= 0 || cmdLine.indexOf("I2C") >= 0 ||
                cmdLine.indexOf("INFO") >= 0 || cmdLine.indexOf("EXEC") >= 0) {
         String dutReply = forwardCommandToDut(cmdLine, 1000);

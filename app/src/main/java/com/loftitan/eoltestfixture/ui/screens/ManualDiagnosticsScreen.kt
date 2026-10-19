@@ -241,6 +241,39 @@ fun ManualDiagnosticsScreen(
                     }
                 }
             }
+
+            // Section: Push Buttons (Active LOW with internal pull-up)
+            item {
+                ManualSectionCard(
+                    title = "PUSH BUTTONS (ACTIVE LOW)",
+                    description = "Query digital state of on-board push buttons (0 = Pressed, 1 = Released)"
+                ) {
+                    PinMapping.Buttons.getAllButtons().forEach { (btnName, gpio) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "$btnName -> GPIO $gpio",
+                                color = BambuTextPrimary,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp
+                            )
+                            OutlinedButton(
+                                onClick = { onTestPin(gpio) },
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BambuCardBorder),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("READ BUTTON", color = BambuTextSecondary, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -45,12 +45,27 @@ object PinMapping {
 
     // 3. Indicators
     object Indicators {
-        const val LED1_GPIO = 47
-        const val LED2_GPIO = 48
+        const val LED1_GPIO = 47 // Red LED
+        const val LED2_GPIO = 48 // Green LED
         const val BUZZER_GPIO = 20
     }
 
-    // 4. Sensor Ports (S1 - S5 & Ultrasonic)
+    // 4. Push Buttons (Active LOW with internal pull-up)
+    object Buttons {
+        const val BUTTON_1_GPIO = 39
+        const val BUTTON_2_GPIO = 40
+        const val BUTTON_3_GPIO = 41
+        const val BUTTON_4_GPIO = 42
+
+        fun getAllButtons(): Map<String, Int> = mapOf(
+            "BTN 1" to BUTTON_1_GPIO,
+            "BTN 2" to BUTTON_2_GPIO,
+            "BTN 3" to BUTTON_3_GPIO,
+            "BTN 4" to BUTTON_4_GPIO
+        )
+    }
+
+    // 5. Sensor Ports (S1 - S5 & Ultrasonic)
     object Sensors {
         const val S1_GPIO = 2
         const val S2_GPIO = 1
