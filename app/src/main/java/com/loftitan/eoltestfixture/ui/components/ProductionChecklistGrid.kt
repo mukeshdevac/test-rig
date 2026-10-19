@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
@@ -123,69 +121,59 @@ fun ProductionChecklistGrid(
     }
     val indicatorSummary = if (indicatorOverall == TestStatus.PASS) "Red/Green LEDs & Buzzer OK" else "Visual & Audio Alerts"
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    val checklistItems = listOf(
+        SubsystemData("1. Power & Supply", powerSummary, powerStatus, Icons.Default.ElectricBolt),
+        SubsystemData("2. Controller & Sync", uartSummary, uartStatus, Icons.Default.Memory),
+        SubsystemData("3. Motor Channels", motorSummary, motorOverall, Icons.Default.PrecisionManufacturing),
+        SubsystemData("4. Push Buttons", buttonSummary, buttonStatus, Icons.Default.SmartButton),
+        SubsystemData("5. Sensors & Ranging", sensorSummary, sensorOverall, Icons.Default.Sensors),
+        SubsystemData("6. Alerts & Sound", indicatorSummary, indicatorOverall, Icons.Default.Campaign)
+    )
+
+    Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier.fillMaxWidth()
     ) {
-        item {
-            SubsystemCard(
-                title = "1. Power & Supply",
-                summary = powerSummary,
-                status = powerStatus,
-                icon = Icons.Default.ElectricBolt
-            )
-        }
-        item {
-            SubsystemCard(
-                title = "2. Controller & Sync",
-                summary = uartSummary,
-                status = uartStatus,
-                icon = Icons.Default.Memory
-            )
-        }
-        item {
-            SubsystemCard(
-                title = "3. Motor Channels",
-                summary = motorSummary,
-                status = motorOverall,
-                icon = Icons.Default.PrecisionManufacturing
-            )
-        }
-        item {
-            SubsystemCard(
-                title = "4. Push Buttons",
-                summary = buttonSummary,
-                status = buttonStatus,
-                icon = Icons.Default.SmartButton
-            )
-        }
-        item {
-            SubsystemCard(
-                title = "5. Sensors & Ranging",
-                summary = sensorSummary,
-                status = sensorOverall,
-                icon = Icons.Default.Sensors
-            )
-        }
-        item {
-            SubsystemCard(
-                title = "6. Alerts & Sound",
-                summary = indicatorSummary,
-                status = indicatorOverall,
-                icon = Icons.Default.Campaign
-            )
+        checklistItems.chunked(columns.coerceAtLeast(1)).forEach { rowItems ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                rowItems.forEach { item ->
+                    SubsystemCard(
+                        title = item.title,
+                        summary = item.summary,
+                        status = item.status,
+                        icon = item.icon,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // Fill remaining cells in the row if row is not full
+                val remainder = columns - rowItems.size
+                if (remainder > 0) {
+                    repeat(remainder) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
         }
     }
 }
+
+private data class SubsystemData(
+    val title: String,
+    val summary: String,
+    val status: TestStatus,
+    val icon: ImageVector
+)
 
 @Composable
 private fun SubsystemCard(
     title: String,
     summary: String,
     status: TestStatus,
-    icon: ImageVector
+    icon: ImageVector,
+    modifier: Modifier = Modifier
 ) {
     val (statusLabel, statusColor, bgColor) = when (status) {
         TestStatus.PASS -> Triple("PASS", BambuAccentGreen, BambuAccentGreen.copy(alpha = 0.12f))
@@ -197,7 +185,7 @@ private fun SubsystemCard(
     }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(BambuCardSurface, RoundedCornerShape(10.dp))
             .border(
