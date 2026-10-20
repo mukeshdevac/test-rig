@@ -13,5 +13,7 @@ app/build
 # Local SDK & JDK bundled binaries
 /android-sdk/
 /jdk17/
+/jdk-17/
 *.zip
 *.log
+*.png

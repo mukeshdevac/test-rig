@@ -121,26 +121,3 @@ data class UsbDeviceStatus(
         get() = "VID: 0x${vendorId.toString(16).uppercase().padStart(4, '0')} | PID: 0x${productId.toString(16).uppercase().padStart(4, '0')}"
 }
 
-data class LiveButtonStatus(
-    val id: String,
-    val label: String,
-    val gpio: Int,
-    val isPressed: Boolean = false,
-    val rawValue: Int = 1
-)
-
-data class LiveSensorStatus(
-    val id: String,
-    val label: String,
-    val gpio: Int,
-    val rawAdc: Int = 0,
-    val voltageV: Float = 0f,
-    val isDigitalHigh: Boolean = false
-)
-
-data class LiveI2cScanStatus(
-    val devices: List<String> = emptyList(),
-    val isScanning: Boolean = false,
-    val lastScanTimestamp: Long = 0L
-)
-

@@ -73,6 +73,9 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
     val commStatuses: StateFlow<List<CommPortStatus>> = testSuiteRunner.commStatuses
     val sensorStatuses: StateFlow<List<SensorPortStatus>> = testSuiteRunner.sensorStatuses
     val indicatorStatuses: StateFlow<List<IndicatorStatus>> = testSuiteRunner.indicatorStatuses
+    val manualButtonStates: StateFlow<Map<Int, Int>> = testSuiteRunner.manualButtonStates
+    val manualSensorStates: StateFlow<Map<Int, Int>> = testSuiteRunner.manualSensorStates
+    val manualSensorVoltages: StateFlow<Map<Int, Float>> = testSuiteRunner.manualSensorVoltages
     val lastCompletedResult: StateFlow<com.loftitan.eoltestfixture.domain.model.CompleteTestResult?> = testSuiteRunner.lastCompletedResult
 
     // Persistence & Google Sheets Queue
@@ -90,17 +93,6 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
 
     val scanMessage: StateFlow<String?> = usbSerialManager.scanMessage
     val recentSerialLogs: StateFlow<List<String>> = usbSerialManager.recentLogs
-
-    val manualDiagnostics = ManualDiagnosticsController(viewModelScope, usbSerialManager)
-    val liveButtons = manualDiagnostics.liveButtons
-    val liveSensors = manualDiagnostics.liveSensors
-    val liveI2cScan = manualDiagnostics.i2cScan
-    val isLiveMonitoring = manualDiagnostics.isLiveMonitoring
-
-    fun toggleLiveMonitoring() = manualDiagnostics.toggleLiveMonitoring()
-    fun pollButtons() = manualDiagnostics.pollButtons()
-    fun pollSensors() = manualDiagnostics.pollSensors()
-    fun triggerI2cScan() = manualDiagnostics.triggerI2cScan()
 
     init {
         initializeHardware()
@@ -204,12 +196,59 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun readButtons() {
+        viewModelScope.launch {
+            testSuiteRunner.queryButtons()
+        }
+    }
+
+    fun readSensors() {
+        viewModelScope.launch {
+            testSuiteRunner.querySensors()
+        }
+    }
+
+    fun pulseMotor(motorId: String, direction: String = "FWD", speedPct: Int = 100, durationMs: Int = 250) {
+        viewModelScope.launch {
+            testSuiteRunner.sendMotorCommand(motorId, "PULSE", direction, speedPct, durationMs)
+        }
+    }
+
+    fun setMotorRun(motorId: String, direction: String = "FWD", speedPct: Int = 100) {
+        viewModelScope.launch {
+            testSuiteRunner.sendMotorCommand(motorId, "RUN", direction, speedPct)
+        }
+    }
+
+    fun stopMotor(motorId: String) {
+        viewModelScope.launch {
+            testSuiteRunner.sendMotorCommand(motorId, "STOP")
+        }
+    }
+
+    fun stopAllMotors() {
+        viewModelScope.launch {
+            testSuiteRunner.stopAllMotors()
+        }
+    }
+
     fun manualPinTest(gpio: Int) {
         viewModelScope.launch {
             when (gpio) {
                 com.loftitan.eoltestfixture.domain.model.PinMapping.Indicators.LED1_GPIO -> pulseLed(1)
                 com.loftitan.eoltestfixture.domain.model.PinMapping.Indicators.LED2_GPIO -> pulseLed(2)
                 com.loftitan.eoltestfixture.domain.model.PinMapping.Indicators.BUZZER_GPIO -> beepBuzzer()
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Buttons.BUTTON_1_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Buttons.BUTTON_2_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Buttons.BUTTON_3_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Buttons.BUTTON_4_GPIO -> readButtons()
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Sensors.S1_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Sensors.S2_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Sensors.S3_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Sensors.S4_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Sensors.S5_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Sensors.ULTRASONIC_S1_GPIO,
+                com.loftitan.eoltestfixture.domain.model.PinMapping.Sensors.ULTRASONIC_S2_GPIO -> readSensors()
                 else -> {
                     val cmd = JSONObject().apply {
                         put("cmd", "PIN_TEST")
@@ -224,7 +263,7 @@ class TestFixtureViewModel(application: Application) : AndroidViewModel(applicat
     fun pulseLed(ledIndex: Int) {
         viewModelScope.launch {
             usbSerialManager.sendCommand("LED${ledIndex}_ON")
-            kotlinx.coroutines.delay(250)
+            kotlinx.coroutines.delay(400)
             usbSerialManager.sendCommand("LED${ledIndex}_OFF")
         }
     }

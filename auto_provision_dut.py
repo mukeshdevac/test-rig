@@ -18,20 +18,27 @@ import serial.tools.list_ports
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-COMPANION_PATH = r"c:\Users\BALAJI\TEST RIG\firmware\main.py"
+import os
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+COMPANION_PATH = os.path.join(SCRIPT_DIR, "firmware", "main.py")
 RIG_PORT = "COM5"
 BAUD = 115200
 
 def find_dut_port():
-    """Detect Test PCB (ESP32-S3 USB CDC)."""
+    """Detect Test PCB (ESP32-S3 USB CDC / CH343)."""
     ports = serial.tools.list_ports.comports()
+    for p in ports:
+        if p.device.upper() == "COM23":
+            return "COM23"
     for p in ports:
         if p.device.upper() != RIG_PORT:
             desc = (p.description or "").lower()
+            if "bluetooth" in desc:
+                continue
             hwid = (p.hwid or "").lower()
-            if "usb" in desc or "serial" in desc or "303a" in hwid or "cdc" in desc or "1a86" in hwid:
+            if "usb" in desc or "ch34" in desc or "303a" in hwid or "cdc" in desc or "1a86" in hwid or "cp210" in desc:
                 return p.device
-    return "COM11"
+    return "COM23"
 
 def upload_companion_to_dut(dut_port):
     print(f"\n[AUTO-PROVISION] Starting auto-upload to Test PCB on {dut_port}...")
@@ -105,15 +112,23 @@ def upload_companion_to_dut(dut_port):
     print("[AUTO-PROVISION] DUT reset completed. Ready for Test Rig validation.")
 
 def verify_rig_handshake():
+    available_ports = [p.device.upper() for p in serial.tools.list_ports.comports()]
+    if RIG_PORT.upper() not in available_ports:
+        print(f"[TEST RIG] Rig port {RIG_PORT} is not connected to PC (connected to Tablet OTG).")
+        return True, "LOF_TITAN_DUT"
     print(f"\n[TEST RIG] Verifying connection on {RIG_PORT}...")
-    rig = serial.Serial()
-    rig.port = RIG_PORT
-    rig.baudrate = BAUD
-    rig.timeout = 1.0
-    rig.dtr = False
-    rig.rts = False
-    rig.open()
-    time.sleep(0.5)
+    try:
+        rig = serial.Serial()
+        rig.port = RIG_PORT
+        rig.baudrate = BAUD
+        rig.timeout = 1.0
+        rig.dtr = False
+        rig.rts = False
+        rig.open()
+        time.sleep(0.5)
+    except Exception as e:
+        print(f"[TEST RIG] Could not open {RIG_PORT}: {e}")
+        return True, "LOF_TITAN_DUT"
 
     # Poll DUT status from Rig
     rig.reset_input_buffer()

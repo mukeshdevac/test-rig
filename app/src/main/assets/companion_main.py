@@ -1,5 +1,5 @@
 # ==============================================================================
-# LOF TITAN S3 - EOL TEST RIG COMPANION v4.2 (HIGH-SPEED RESILIENT COMMUNICATION)
+# LOF TITAN S3 - EOL TEST RIG COMPANION v4.0 (OFFICIAL HARDWARE PIN MAPPING)
 # ==============================================================================
 # Target PCB: ESP32-S3 running MicroPython
 # ==============================================================================
@@ -8,7 +8,7 @@ import time
 import json
 import machine
 
-# --- OFFICIAL HARDWARE PIN DEFINITIONS ---
+# --- OFFICIAL PIN DEFINITIONS ---
 PIN_LED_RED = 47
 PIN_LED_GREEN = 48
 PIN_BUZZER = 20
@@ -58,41 +58,35 @@ def safe_print(*args):
 # Device Identity
 try:
     uid = machine.unique_id()
-    dev_id = "".join([f"{b:02X}" for b in uid])
-    device_name = f"LOF_TITAN_{dev_id[-4:]}"
+    dev_id = f"{uid[-2]:02X}{uid[-1]:02X}"
+    device_name = f"LOF_TITAN_{dev_id}"
 except Exception:
-    dev_id = "UNKNOWN"
+    dev_id = "0000"
     device_name = "LOF_TITAN_DUT"
 
-# Watchdog Feed
+safe_print(f"[COMPANION] LOF TITAN S3 EOL Companion v4.0 for {device_name}")
+
+# Watchdog
 try:
-    wdt = machine.WDT(timeout=8000)
-    def feed():
+    wdt = machine.WDT(timeout=16000)
+except Exception:
+    wdt = None
+
+def feed():
+    if wdt:
         try: wdt.feed()
         except Exception: pass
-except Exception:
-    def feed(): pass
 
-# Indicators & Sound
+# Indicators & Buzzer
 try:
-    led_red = machine.Pin(PIN_LED_RED, machine.Pin.OUT)
-    led_red.value(0)
-except Exception:
-    led_red = None
+    led_red = machine.Pin(PIN_LED_RED, machine.Pin.OUT, value=0)
+    led_green = machine.Pin(PIN_LED_GREEN, machine.Pin.OUT, value=0)
+    buzzer = machine.Pin(PIN_BUZZER, machine.Pin.OUT, value=0)
+except Exception as e:
+    safe_print(f"[INIT INDICATORS ERR] {e}")
+    led_red, led_green, buzzer = None, None, None
 
-try:
-    led_green = machine.Pin(PIN_LED_GREEN, machine.Pin.OUT)
-    led_green.value(0)
-except Exception:
-    led_green = None
-
-try:
-    buzzer = machine.Pin(PIN_BUZZER, machine.Pin.OUT)
-    buzzer.value(0)
-except Exception:
-    buzzer = None
-
-# Buttons (Active LOW with internal pull-up - Connected to GND when pressed)
+# Buttons (Active LOW with pull-up)
 btn_pins = {}
 for idx, p in enumerate(ALL_BUTTON_PINS, 1):
     try:
@@ -100,86 +94,89 @@ for idx, p in enumerate(ALL_BUTTON_PINS, 1):
     except Exception:
         pass
 
-# Sensor ADCs & Digital Pins
-sensor_adcs = {}
+# Sensors
 sensor_pins = {}
 for idx, p in enumerate(ALL_SENSOR_PINS, 1):
-    k = f"s{idx}"
     try:
-        p_obj = machine.Pin(p, machine.Pin.IN, machine.Pin.PULL_UP)
-        sensor_pins[k] = p_obj
-        adc_obj = machine.ADC(p_obj)
-        try:
-            adc_obj.atten(machine.ADC.ATTN_11DB)
-        except Exception:
-            pass
-        sensor_adcs[k] = adc_obj
+        sensor_pins[f"s{idx}"] = machine.Pin(p, machine.Pin.IN, machine.Pin.PULL_UP)
     except Exception:
         pass
-
 try:
     sensor_pins["us1"] = machine.Pin(PIN_ULTRASONIC_S1, machine.Pin.IN, machine.Pin.PULL_UP)
     sensor_pins["us2"] = machine.Pin(PIN_ULTRASONIC_S2, machine.Pin.IN, machine.Pin.PULL_UP)
 except Exception:
     pass
 
-# Hardwired UART (Permanent 115200 Baud, 2KB buffer, non-blocking)
+SENSOR_PIN_MAP = {
+    "s1": PIN_SENSOR_S1,
+    "s2": PIN_SENSOR_S2,
+    "s3": PIN_SENSOR_S3,
+    "s4": PIN_SENSOR_S4,
+    "s5": PIN_SENSOR_S5,
+    "us1": PIN_ULTRASONIC_S1,
+    "us2": PIN_ULTRASONIC_S2
+}
+
+# Pre-initialize ADC1 instances on channels 1, 2, 3, 4, 5, 6
+adc_instances = {}
+for k, pnum in SENSOR_PIN_MAP.items():
+    if pnum in (1, 2, 3, 4, 5, 6):
+        try:
+            adc = machine.ADC(machine.Pin(pnum))
+            adc.atten(machine.ADC.ATTN_11DB)
+            adc_instances[k] = adc
+        except Exception:
+            pass
+
+# UART to Test Rig (Hardwired: S3 TX=17 -> Rig RX=3, S3 RX=18 <- Rig TX=1)
 try:
-    uart = machine.UART(1, baudrate=115200, tx=PIN_UART_TX, rx=PIN_UART_RX, rxbuf=2048, timeout=0)
+    uart = machine.UART(1, baudrate=115200, tx=PIN_UART_TX, rx=PIN_UART_RX, timeout=30)
+    machine.Pin(PIN_UART_TX, machine.Pin.IN)  # High-Z idle to prevent bus contention
 except Exception as e:
     safe_print(f"[UART ERR] {e}")
     uart = None
 
 def send_uart_response(payload_str):
-    if uart:
-        try:
-            uart.write(payload_str)
-        except Exception:
-            pass
+    global uart
+    try:
+        safe_print(f"[DUT TX -> RIG] {payload_str.strip()}")
+        uart = machine.UART(1, baudrate=115200, tx=PIN_UART_TX, rx=PIN_UART_RX, timeout=30)
+        uart.write(payload_str)
+        # Ensure complete FIFO drain before putting TX pin into High-Z mode
+        tx_wait = max(50, (len(payload_str) * 10 // 115) + 35)
+        time.sleep_ms(tx_wait)
+        machine.Pin(PIN_UART_TX, machine.Pin.IN)
+    except Exception as e:
+        safe_print(f"[UART TX ERR] {e}")
 
 def read_buttons():
     res = {}
     for k, p in btn_pins.items():
-        try:
-            raw = p.value()
-            # Buttons are active LOW: 0 = PRESSED (connected to GND), 1 = RELEASED
-            is_pressed = (raw == 0)
-            res[k] = {
-                "raw": raw,
-                "pressed": is_pressed,
-                "state": "PRESSED" if is_pressed else "RELEASED"
-            }
-        except Exception:
-            res[k] = {"raw": 1, "pressed": False, "state": "ERROR"}
+        try: res[k] = 0 if p.value() == 0 else 1  # 0: Pressed (GND), 1: Released (Pullup)
+        except Exception: res[k] = -1
     return res
 
 def read_sensors():
     res = {}
-    for k, adc in sensor_adcs.items():
+    for k, pnum in SENSOR_PIN_MAP.items():
         try:
-            raw = adc.read()
-            v = round((raw / 4095.0) * 3.3, 2)
+            if k in adc_instances:
+                raw = adc_instances[k].read()
+                voltage = round((raw / 4095.0) * 3.3, 2)
+                logic = 1 if voltage >= 1.65 else 0
+            else:
+                p = sensor_pins.get(k)
+                val = p.value() if p else 0
+                logic = val
+                voltage = 3.3 if val == 1 else 0.0
+                raw = 4095 if val == 1 else 0
             res[k] = {
-                "raw": raw,
-                "voltage": v,
-                "digital": 1 if raw > 2000 else 0
+                "logic": logic,
+                "voltage": voltage,
+                "raw": raw
             }
         except Exception:
-            p = sensor_pins.get(k)
-            pv = p.value() if p else -1
-            res[k] = {
-                "raw": 4095 if pv == 1 else 0,
-                "voltage": 3.3 if pv == 1 else 0.0,
-                "digital": pv
-            }
-    for uk in ["us1", "us2"]:
-        p = sensor_pins.get(uk)
-        pv = p.value() if p else -1
-        res[uk] = {
-            "raw": 4095 if pv == 1 else 0,
-            "voltage": 3.3 if pv == 1 else 0.0,
-            "digital": pv
-        }
+            res[k] = {"logic": -1, "voltage": 0.0, "raw": 0}
     return res
 
 def scan_i2c():
@@ -190,24 +187,53 @@ def scan_i2c():
     except Exception:
         return []
 
-def pulse_motor(m_key, duration_ms=70, direction=1):
+active_pwms = {}
+
+def set_motor(m_key, speed_pct=100, direction="FWD"):
     pins = MOTOR_PINS.get(m_key.upper())
     if not pins: return False
-    try:
-        p_a = machine.Pin(pins[0], machine.Pin.OUT)
-        p_b = machine.Pin(pins[1], machine.Pin.OUT)
-        if direction >= 1:
-            p_a.value(1); p_b.value(0)
-        else:
-            p_a.value(0); p_b.value(1)
-        time.sleep_ms(duration_ms)
-        p_a.value(0); p_b.value(0)
+    pin_a, pin_b = pins[0], pins[1]
+
+    for p in (pin_a, pin_b):
+        if p in active_pwms:
+            try: active_pwms[p].deinit()
+            except Exception: pass
+            del active_pwms[p]
+
+    speed_pct = max(0, min(100, int(speed_pct)))
+    dir_str = str(direction).upper()
+
+    if speed_pct == 0 or dir_str in ("STOP", "0", "OFF"):
+        machine.Pin(pin_a, machine.Pin.OUT, value=0)
+        machine.Pin(pin_b, machine.Pin.OUT, value=0)
         return True
-    except Exception:
-        return False
+
+    duty = int((speed_pct / 100.0) * 1023)
+
+    if dir_str in ("FWD", "FORWARD", "1", "+"):
+        machine.Pin(pin_b, machine.Pin.OUT, value=0)
+        pwm = machine.PWM(machine.Pin(pin_a), freq=1000)
+        pwm.duty(duty)
+        active_pwms[pin_a] = pwm
+    else:
+        machine.Pin(pin_a, machine.Pin.OUT, value=0)
+        pwm = machine.PWM(machine.Pin(pin_b), freq=1000)
+        pwm.duty(duty)
+        active_pwms[pin_b] = pwm
+    return True
+
+def pulse_motor(m_key, duration_ms=250, speed_pct=100, direction="FWD"):
+    set_motor(m_key, speed_pct, direction)
+    time.sleep_ms(duration_ms)
+    set_motor(m_key, 0, "STOP")
+    return True
+
+def stop_all_motors():
+    for m in ("M1", "M2", "M3", "M4", "M5", "M6"):
+        set_motor(m, 0, "STOP")
 
 rx_buf = b""
-safe_print("[COMPANION] LOF TITAN S3 Ready v4.2!")
+safe_print("[COMPANION] LOF TITAN S3 Ready!")
 
 while True:
     feed()
@@ -227,15 +253,11 @@ while True:
                     if not l_str:
                         continue
 
-                    # Noise-resistant JSON extraction
-                    i1 = l_str.find("{")
-                    i2 = l_str.rfind("}")
-                    cmd_obj = None
-                    if i1 != -1 and i2 > i1:
-                        try:
-                            cmd_obj = json.loads(l_str[i1:i2+1])
-                        except Exception:
-                            pass
+                    # Ignore echo responses and test rig telemetry to prevent loopback storms
+                    if '"resp":' in l_str or '"type":' in l_str or "RIG_STARTUP" in l_str or "DUT_STATUS" in l_str:
+                        continue
+
+                    safe_print(f"[DUT RX <- RIG] {l_str}")
 
                     # 1. PING / Handshake
                     if "PING" in l_str:
@@ -245,23 +267,53 @@ while True:
                             "device_name": device_name,
                             "device_id": dev_id,
                             "ble_name": device_name,
-                            "firmware": "LOF_TITAN_S3_v4.2",
+                            "firmware": "LOF_TITAN_S3_v4.0",
                             "uptime_ms": time.ticks_ms()
                         }) + "\n"
                         send_uart_response(resp)
 
-                    # 2. START_TEST
+                    # 2. START_TEST / Automated Test (Runs slowly & deliberately step by step)
                     elif "START_TEST" in l_str or "SELF_TEST" in l_str:
+                        # Step 1: LED 1 RED (Blink twice)
                         if led_red: led_red.value(1)
-                        if led_green: led_green.value(1)
-                        if buzzer: buzzer.value(1)
-                        time.sleep_ms(100)
-                        if buzzer: buzzer.value(0)
+                        time.sleep_ms(400)
                         if led_red: led_red.value(0)
-                        if led_green: led_green.value(0)
+                        time.sleep_ms(200)
+                        if led_red: led_red.value(1)
+                        time.sleep_ms(400)
+                        if led_red: led_red.value(0)
+                        time.sleep_ms(400)
 
+                        # Step 2: LED 2 GREEN (Blink twice)
+                        if led_green: led_green.value(1)
+                        time.sleep_ms(400)
+                        if led_green: led_green.value(0)
+                        time.sleep_ms(200)
+                        if led_green: led_green.value(1)
+                        time.sleep_ms(400)
+                        if led_green: led_green.value(0)
+                        time.sleep_ms(400)
+
+                        # Step 3: BUZZER (Audible alert)
+                        if buzzer: buzzer.value(1)
+                        time.sleep_ms(250)
+                        if buzzer: buzzer.value(0)
+                        time.sleep_ms(150)
+                        if buzzer: buzzer.value(1)
+                        time.sleep_ms(250)
+                        if buzzer: buzzer.value(0)
+                        time.sleep_ms(500)
+
+                        # Step 4: MOTORS (M1 to M4 dual-phase spin)
                         for m in ["M1", "M2", "M3", "M4"]:
-                            pulse_motor(m, 50, 1)
+                            set_motor(m, 75, "FWD")
+                            time.sleep_ms(400)
+                            set_motor(m, 0, "STOP")
+                            time.sleep_ms(150)
+                            set_motor(m, 75, "REV")
+                            time.sleep_ms(400)
+                            set_motor(m, 0, "STOP")
+                            time.sleep_ms(300)
 
                         resp = json.dumps({
                             "type": "TEST_COMPLETE",
@@ -277,55 +329,35 @@ while True:
 
                     # 3. BUZZER Control
                     elif "BUZZER" in l_str or "BEEP" in l_str:
-                        st = "OFF"
-                        if "OFF" in l_str or (cmd_obj and cmd_obj.get("state") == 0):
+                        if "OFF" in l_str or 'state":0' in l_str:
                             if buzzer: buzzer.value(0)
                             st = "OFF"
-                        elif "ON" in l_str or (cmd_obj and cmd_obj.get("state") == 1):
+                        elif "ON" in l_str or 'state":1' in l_str:
                             if buzzer: buzzer.value(1)
                             st = "ON"
                         else:
                             if buzzer:
                                 buzzer.value(1)
-                                time.sleep_ms(120)
+                                time.sleep_ms(250)
                                 buzzer.value(0)
                             st = "BEEP_OK"
                         send_uart_response(json.dumps({"resp": "BUZZER_STATE", "state": st, "device_name": device_name}) + "\n")
 
-                    # 4. LED Control (Disambiguated JSON & Token parsing)
+                    # 4. LED Control (Red = LED 1 / Green = LED 2)
                     elif "LED" in l_str:
-                        target_led = None
-                        target_val = None
-                        if cmd_obj and cmd_obj.get("cmd") == "LED":
-                            target_led = str(cmd_obj.get("led", ""))
-                            target_val = int(cmd_obj.get("state", 0))
+                        val = 1 if ("ON" in l_str or 'state":1' in l_str) else 0
+                        if '"led":2' in l_str or "LED2" in l_str or "GREEN" in l_str:
+                            if led_green: led_green.value(val)
+                            send_uart_response(json.dumps({"resp": "LED2_STATE", "color": "GREEN", "state": "ON" if val else "OFF", "device_name": device_name}) + "\n")
+                        elif '"led":1' in l_str or "LED1" in l_str or "RED" in l_str:
+                            if led_red: led_red.value(val)
+                            send_uart_response(json.dumps({"resp": "LED1_STATE", "color": "RED", "state": "ON" if val else "OFF", "device_name": device_name}) + "\n")
+                        else:
+                            if led_red: led_red.value(val)
+                            if led_green: led_green.value(val)
+                            send_uart_response(json.dumps({"resp": "ALL_LEDS_STATE", "state": "ON" if val else "OFF", "device_name": device_name}) + "\n")
 
-                        if target_led is None:
-                            if "LED1_ON" in l_str or "RED_ON" in l_str:
-                                target_led = "1"; target_val = 1
-                            elif "LED1_OFF" in l_str or "RED_OFF" in l_str:
-                                target_led = "1"; target_val = 0
-                            elif "LED2_ON" in l_str or "GREEN_ON" in l_str:
-                                target_led = "2"; target_val = 1
-                            elif "LED2_OFF" in l_str or "GREEN_OFF" in l_str:
-                                target_led = "2"; target_val = 0
-                            elif "LEDS_ON" in l_str or "ALL_ON" in l_str:
-                                target_led = "ALL"; target_val = 1
-                            elif "LEDS_OFF" in l_str or "ALL_OFF" in l_str:
-                                target_led = "ALL"; target_val = 0
-
-                        if target_led in ["1", "RED"]:
-                            if led_red: led_red.value(target_val)
-                            send_uart_response(json.dumps({"resp": "LED1_STATE", "color": "RED", "state": "ON" if target_val else "OFF", "device_name": device_name}) + "\n")
-                        elif target_led in ["2", "GREEN"]:
-                            if led_green: led_green.value(target_val)
-                            send_uart_response(json.dumps({"resp": "LED2_STATE", "color": "GREEN", "state": "ON" if target_val else "OFF", "device_name": device_name}) + "\n")
-                        elif target_led == "ALL":
-                            if led_red: led_red.value(target_val)
-                            if led_green: led_green.value(target_val)
-                            send_uart_response(json.dumps({"resp": "ALL_LEDS_STATE", "state": "ON" if target_val else "OFF", "device_name": device_name}) + "\n")
-
-                    # 5. BUTTONS Query (Push buttons 39, 40, 41, 42 - Active LOW)
+                    # 5. BUTTONS Query (Push buttons 39, 40, 41, 42)
                     elif "BUTTON" in l_str:
                         send_uart_response(json.dumps({
                             "resp": "BUTTONS_STATE",
@@ -333,7 +365,7 @@ while True:
                             "device_name": device_name
                         }) + "\n")
 
-                    # 6. SENSORS Query (S1-S5 ADC, US1-US2)
+                    # 6. SENSORS Query (S1-S5, Ultrasonic)
                     elif "SENSOR" in l_str:
                         send_uart_response(json.dumps({
                             "resp": "SENSORS_STATE",
@@ -341,7 +373,87 @@ while True:
                             "device_name": device_name
                         }) + "\n")
 
-                    # 7. I2C Bus Scan
+                    # 6b. PIN_TEST fallback for buttons and sensors
+                    elif "PIN_TEST" in l_str:
+                        if any(f'"{p}"' in l_str or f":{p}" in l_str or f": {p}" in l_str for p in ALL_BUTTON_PINS):
+                            send_uart_response(json.dumps({
+                                "resp": "BUTTONS_STATE",
+                                "buttons": read_buttons(),
+                                "device_name": device_name
+                            }) + "\n")
+                        elif any(f'"{p}"' in l_str or f":{p}" in l_str or f": {p}" in l_str for p in (ALL_SENSOR_PINS + [PIN_ULTRASONIC_S1, PIN_ULTRASONIC_S2])):
+                            send_uart_response(json.dumps({
+                                "resp": "SENSORS_STATE",
+                                "sensors": read_sensors(),
+                                "device_name": device_name
+                            }) + "\n")
+                        else:
+                            send_uart_response(json.dumps({
+                                "resp": "PIN_TEST_OK",
+                                "device_name": device_name
+                            }) + "\n")
+
+                    # 7. MOTOR Control (Direction & Speed)
+                    elif "MOTOR" in l_str:
+                        if "STOP_ALL" in l_str or "ALL_OFF" in l_str:
+                            stop_all_motors()
+                            send_uart_response(json.dumps({
+                                "resp": "MOTOR_STATE",
+                                "action": "STOP_ALL",
+                                "device_name": device_name
+                            }) + "\n")
+                        else:
+                            m_name = "M1"
+                            for m_candidate in ["M1", "M2", "M3", "M4", "M5", "M6"]:
+                                if m_candidate in l_str:
+                                    m_name = m_candidate
+                                    break
+
+                            direction = "FWD"
+                            if "REV" in l_str or "REVERSE" in l_str or '"dir":"REV"' in l_str or '"dir":-1' in l_str:
+                                direction = "REV"
+
+                            speed_pct = 100
+                            idx_speed = l_str.find('"speed":')
+                            if idx_speed >= 0:
+                                try:
+                                    end_speed = l_str.find(',', idx_speed)
+                                    if end_speed == -1: end_speed = l_str.find('}', idx_speed)
+                                    speed_pct = int(l_str[idx_speed+8:end_speed].strip())
+                                except Exception:
+                                    speed_pct = 100
+
+                            duration_ms = 250
+                            idx_dur = l_str.find('"duration_ms":')
+                            if idx_dur >= 0:
+                                try:
+                                    end_dur = l_str.find(',', idx_dur)
+                                    if end_dur == -1: end_dur = l_str.find('}', idx_dur)
+                                    duration_ms = int(l_str[idx_dur+14:end_dur].strip())
+                                except Exception:
+                                    duration_ms = 250
+
+                            if "STOP" in l_str or '"action":"STOP"' in l_str or speed_pct == 0:
+                                set_motor(m_name, 0, "STOP")
+                                act = "STOP"
+                            elif "RUN" in l_str or '"action":"RUN"' in l_str:
+                                set_motor(m_name, speed_pct, direction)
+                                act = "RUN"
+                            else:
+                                pulse_motor(m_name, duration_ms, speed_pct, direction)
+                                act = "PULSE"
+
+                            send_uart_response(json.dumps({
+                                "resp": "MOTOR_STATE",
+                                "motor": m_name,
+                                "action": act,
+                                "dir": direction,
+                                "speed": speed_pct,
+                                "pins": list(MOTOR_PINS.get(m_name, ())),
+                                "device_name": device_name
+                            }) + "\n")
+
+                    # 8. I2C Bus Scan
                     elif "I2C" in l_str:
                         devs = scan_i2c()
                         send_uart_response(json.dumps({
@@ -353,19 +465,4 @@ while True:
                             "device_name": device_name
                         }) + "\n")
 
-                    # 8. MOTOR Pulse Test
-                    elif "MOTOR" in l_str:
-                        m_name = "M1"
-                        for m_candidate in ["M1", "M2", "M3", "M4", "M5", "M6"]:
-                            if m_candidate in l_str:
-                                m_name = m_candidate
-                                break
-                        ok = pulse_motor(m_name, 60, 1)
-                        send_uart_response(json.dumps({
-                            "resp": "MOTOR_PULSE_OK" if ok else "MOTOR_ERR",
-                            "motor": m_name,
-                            "pins": list(MOTOR_PINS.get(m_name, ())),
-                            "device_name": device_name
-                        }) + "\n")
-
-    time.sleep_ms(1)
+    time.sleep_ms(10)

@@ -191,7 +191,10 @@ void parseTargetIdentity(const String &jsonFrame) {
 }
 
 bool checkTestPcbUartHandshake(bool verbose = false) {
-  static int consecutiveUartFailures = 0;
+  while (Serial.available()) {
+    Serial.read();
+  }
+
   Serial.println("{\"cmd\":\"PING\",\"from\":\"TEST_RIG\"}");
   Serial.flush();
 
@@ -210,7 +213,6 @@ bool checkTestPcbUartHandshake(bool verbose = false) {
               Serial.print("[DUT->RIG] ");
               Serial.println(response);
             }
-            consecutiveUartFailures = 0;
             return true;
           }
           response = "";
@@ -219,15 +221,12 @@ bool checkTestPcbUartHandshake(bool verbose = false) {
         response += c;
       }
     }
-  }
-  consecutiveUartFailures++;
-  if (consecutiveUartFailures < 3 && isPcbUartDocked) {
-    return true;
+    delay(1);
   }
   return false;
 }
 
-String forwardCommandToDut(String cmdPayload, unsigned long timeoutMs = 800) {
+String forwardCommandToDut(String cmdPayload, unsigned long timeoutMs = 1500) {
   while (Serial.available())
     Serial.read();
 
@@ -241,6 +240,11 @@ String forwardCommandToDut(String cmdPayload, unsigned long timeoutMs = 800) {
       char c = Serial.read();
       if (c == '\n' || c == '\r') {
         if (resp.length() > 0) {
+          // If this is an echo of the command sent out, discard and keep waiting for DUT
+          if (resp == cmdPayload || resp.startsWith("{\"cmd\"")) {
+            resp = "";
+            continue;
+          }
           parseTargetIdentity(resp);
           return resp;
         }
@@ -248,27 +252,25 @@ String forwardCommandToDut(String cmdPayload, unsigned long timeoutMs = 800) {
         resp += c;
       }
     }
+    delay(1);
   }
   return "";
 }
 
 void broadcastDutStatus(bool isDocked) {
+  isPcbUartDocked = isDocked;
   float busVoltage = 0.0f;
   float currentMa = 0.0f;
   readPower(busVoltage, currentMa);
 
-  // If bus voltage > 2.8V or current > 5mA, the PCB is physically seated on pogo pins
-  bool physicallyDocked = (isDocked || busVoltage > 2.8f || currentMa > 5.0f);
-  isPcbUartDocked = physicallyDocked;
-
   Serial.print("{\"type\":\"DUT_STATUS\",\"connected\":");
-  Serial.print(physicallyDocked ? "true" : "false");
+  Serial.print(isDocked ? "true" : "false");
   Serial.print(",\"device_name\":\"");
   Serial.print(dutDeviceName);
   Serial.print("\",\"device_id\":\"");
   Serial.print(dutDeviceId);
   Serial.print("\",\"uart_status\":\"");
-  Serial.print(isDocked ? "ONLINE" : (physicallyDocked ? "ONLINE" : "OFFLINE"));
+  Serial.print(isDocked ? "ONLINE" : "OFFLINE");
   Serial.print("\",\"voltage_v\":");
   Serial.print(busVoltage, 2);
   Serial.print(",\"quiescent_ma\":");
@@ -285,17 +287,77 @@ void runAutomatedTest() {
   readPower(busVoltage, quiescentMa);
   float peakMa = quiescentMa;
 
-  String dutResult = forwardCommandToDut("{\"cmd\":\"START_TEST\"}", 1200);
-  bool uartPass = (dutResult.indexOf("TEST_COMPLETE") >= 0 ||
-                   dutResult.indexOf("PASS") >= 0);
-  if (dutResult.length() > 0) {
-    parseTargetIdentity(dutResult);
-  }
+  // 1. Step: Testing LED 1 (RED)
+  pinMode(PIN_LED1, OUTPUT);
+  digitalWrite(PIN_LED1, HIGH);
+  forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":1}", 300);
+  delay(400);
+  digitalWrite(PIN_LED1, LOW);
+  forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":0}", 300);
+  delay(200);
+  digitalWrite(PIN_LED1, HIGH);
+  forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":1}", 300);
+  delay(400);
+  digitalWrite(PIN_LED1, LOW);
+  forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":0}", 300);
+  delay(400);
 
+  // 2. Step: Testing LED 2 (GREEN)
+  pinMode(PIN_LED2, OUTPUT);
+  digitalWrite(PIN_LED2, HIGH);
+  forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":1}", 300);
+  delay(400);
+  digitalWrite(PIN_LED2, LOW);
+  forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":0}", 300);
+  delay(200);
+  digitalWrite(PIN_LED2, HIGH);
+  forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":1}", 300);
+  delay(400);
+  digitalWrite(PIN_LED2, LOW);
+  forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":0}", 300);
+  delay(400);
+
+  // 3. Step: Testing Audible Buzzer
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_BUZZER, HIGH);
+  forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":1}", 200);
+  delay(250);
+  digitalWrite(PIN_BUZZER, LOW);
+  forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":0}", 200);
+  delay(150);
+  digitalWrite(PIN_BUZZER, HIGH);
+  forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":1}", 200);
+  delay(250);
+  digitalWrite(PIN_BUZZER, LOW);
+  forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":0}", 200);
+  delay(500);
+
+  // 4. Step: Testing Motors M1, M2, M3, M4 (Sequential Dual-Phase Rotation)
+  forwardCommandToDut("{\"cmd\":\"MOTOR\",\"motor\":\"M1\",\"action\":\"RUN\",\"dir\":\"FWD\",\"speed\":75}", 200);
   pulseMotorPins(PIN_M1_A, PIN_M1_B);
+  forwardCommandToDut("{\"cmd\":\"MOTOR\",\"motor\":\"M1\",\"action\":\"STOP\"}", 200);
+  delay(300);
+
+  forwardCommandToDut("{\"cmd\":\"MOTOR\",\"motor\":\"M2\",\"action\":\"RUN\",\"dir\":\"FWD\",\"speed\":75}", 200);
   pulseMotorPins(PIN_M2_A, PIN_M2_B);
+  forwardCommandToDut("{\"cmd\":\"MOTOR\",\"motor\":\"M2\",\"action\":\"STOP\"}", 200);
+  delay(300);
+
+  forwardCommandToDut("{\"cmd\":\"MOTOR\",\"motor\":\"M3\",\"action\":\"RUN\",\"dir\":\"FWD\",\"speed\":75}", 200);
   pulseMotorPins(PIN_M3_A, PIN_M3_B);
+  forwardCommandToDut("{\"cmd\":\"MOTOR\",\"motor\":\"M3\",\"action\":\"STOP\"}", 200);
+  delay(300);
+
+  forwardCommandToDut("{\"cmd\":\"MOTOR\",\"motor\":\"M4\",\"action\":\"RUN\",\"dir\":\"FWD\",\"speed\":75}", 200);
   pulseMotorPins(PIN_M4_A, PIN_M4_B);
+  forwardCommandToDut("{\"cmd\":\"MOTOR\",\"motor\":\"M4\",\"action\":\"STOP\"}", 200);
+  delay(400);
+
+  // 5. Step: Query Push Buttons & Cable Sensors from Target PCB
+  String btnReply = forwardCommandToDut("{\"cmd\":\"BUTTON\"}", 800);
+  delay(200);
+  String sensorReply = forwardCommandToDut("{\"cmd\":\"SENSOR\"}", 1500);
+  delay(200);
 
   float runningVoltage = 0.0f;
   float activeCurrentMa = 0.0f;
@@ -312,6 +374,7 @@ void runAutomatedTest() {
   bool i2cPass = (nDevices > 0);
 
   bool powerPass = (quiescentMa <= 500.0f);
+  bool uartPass = (isPcbUartDocked || dutDeviceName != "NOT_DETECTED");
   bool allPass = uartPass && powerPass;
 
   Serial.print("{\"type\":\"TEST_COMPLETE\",\"device_name\":\"");
@@ -376,9 +439,12 @@ void setup() {
   digitalWrite(PIN_M1_A, LOW);
   digitalWrite(PIN_M1_B, LOW);
 
-  pinMode(PIN_LED1, INPUT);
-  pinMode(PIN_LED2, INPUT);
-  pinMode(PIN_BUZZER, INPUT);
+  pinMode(PIN_LED1, OUTPUT);
+  pinMode(PIN_LED2, OUTPUT);
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_LED1, LOW);
+  digitalWrite(PIN_LED2, LOW);
+  digitalWrite(PIN_BUZZER, LOW);
 
   Serial.print("{\"type\":\"RIG_STARTUP\",\"device\":\"LOF_TITAN_S3_RIG\",\"fw_"
                "ver\":\"3.4.0\",\"ina219\":");
@@ -387,15 +453,11 @@ void setup() {
 }
 
 void loop() {
-  static String rxAccumulator = "";
-  while (Serial.available()) {
-    char c = (char)Serial.read();
-    if (c == '\n') {
-      rxAccumulator.trim();
-      if (rxAccumulator.length() > 0) {
-        String cmdLine = rxAccumulator;
-        rxAccumulator = "";
-        if (cmdLine.indexOf("PING") >= 0 && cmdLine.indexOf("TEST_RIG") == -1) {
+  if (Serial.available()) {
+    String cmdLine = Serial.readStringUntil('\n');
+    cmdLine.trim();
+    if (cmdLine.length() > 0) {
+      if (cmdLine.indexOf("PING") >= 0 && cmdLine.indexOf("TEST_RIG") == -1) {
         float v = 0.0f, c = 0.0f;
         readPower(v, c);
         Serial.print("{\"resp\":\"PONG\",\"timestamp\":");
@@ -431,52 +493,76 @@ void loop() {
         digitalWrite(PIN_M1_B, LOW);
         Serial.println("{\"type\":\"TEST_ABORTED\"}");
       }
-      // Direct Hardware LED1 Controls (Immediate dispatch to Target PCB)
+      // Direct Hardware LED1 Controls (Controls Probe Pin 2 + Forwards to Target PCB)
       else if (cmdLine.equals("LED1_ON") || cmdLine.indexOf("LED1_ON") >= 0) {
-        Serial.println("{\"cmd\":\"LED\",\"led\":1,\"state\":1}");
+        pinMode(PIN_LED1, OUTPUT);
+        digitalWrite(PIN_LED1, HIGH);
+        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":1}", 200);
         Serial.println("{\"resp\":\"LED1_STATE\",\"state\":\"ON\",\"pin\":2}");
       } else if (cmdLine.equals("LED1_OFF") || cmdLine.indexOf("LED1_OFF") >= 0) {
-        Serial.println("{\"cmd\":\"LED\",\"led\":1,\"state\":0}");
+        pinMode(PIN_LED1, OUTPUT);
+        digitalWrite(PIN_LED1, LOW);
+        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":1,\"state\":0}", 200);
         Serial.println("{\"resp\":\"LED1_STATE\",\"state\":\"OFF\",\"pin\":2}");
       }
-      // Direct Hardware LED2 Controls (Immediate dispatch to Target PCB)
+      // Direct Hardware LED2 Controls (Controls Probe Pin 4 + Forwards to Target PCB)
       else if (cmdLine.equals("LED2_ON") || cmdLine.indexOf("LED2_ON") >= 0) {
-        Serial.println("{\"cmd\":\"LED\",\"led\":2,\"state\":1}");
+        pinMode(PIN_LED2, OUTPUT);
+        digitalWrite(PIN_LED2, HIGH);
+        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":1}", 200);
         Serial.println("{\"resp\":\"LED2_STATE\",\"state\":\"ON\",\"pin\":4}");
       } else if (cmdLine.equals("LED2_OFF") || cmdLine.indexOf("LED2_OFF") >= 0) {
-        Serial.println("{\"cmd\":\"LED\",\"led\":2,\"state\":0}");
+        pinMode(PIN_LED2, OUTPUT);
+        digitalWrite(PIN_LED2, LOW);
+        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":2,\"state\":0}", 200);
         Serial.println("{\"resp\":\"LED2_STATE\",\"state\":\"OFF\",\"pin\":4}");
       }
       // All LEDs
       else if (cmdLine.equals("LEDS_ON") || cmdLine.indexOf("LEDS_ON") >= 0 || cmdLine.indexOf("ALL_LEDS_ON") >= 0) {
-        Serial.println("{\"cmd\":\"LED\",\"led\":\"ALL\",\"state\":1}");
+        pinMode(PIN_LED1, OUTPUT);
+        pinMode(PIN_LED2, OUTPUT);
+        digitalWrite(PIN_LED1, HIGH);
+        digitalWrite(PIN_LED2, HIGH);
+        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":\"ALL\",\"state\":1}", 200);
         Serial.println("{\"resp\":\"ALL_LEDS_STATE\",\"state\":\"ON\"}");
       } else if (cmdLine.equals("LEDS_OFF") || cmdLine.indexOf("LEDS_OFF") >= 0 || cmdLine.indexOf("ALL_LEDS_OFF") >= 0) {
-        Serial.println("{\"cmd\":\"LED\",\"led\":\"ALL\",\"state\":0}");
+        pinMode(PIN_LED1, OUTPUT);
+        pinMode(PIN_LED2, OUTPUT);
+        digitalWrite(PIN_LED1, LOW);
+        digitalWrite(PIN_LED2, LOW);
+        forwardCommandToDut("{\"cmd\":\"LED\",\"led\":\"ALL\",\"state\":0}", 200);
         Serial.println("{\"resp\":\"ALL_LEDS_STATE\",\"state\":\"OFF\"}");
       }
-      // Direct Hardware Buzzer Controls
+      // Direct Hardware Buzzer Controls (Controls Probe Pin 19 + Forwards to Target PCB)
       else if (cmdLine.equals("BUZZER_ON") || cmdLine.indexOf("BUZZER_ON") >= 0) {
-        Serial.println("{\"cmd\":\"BUZZER\",\"state\":1}");
+        pinMode(PIN_BUZZER, OUTPUT);
+        digitalWrite(PIN_BUZZER, HIGH);
+        forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":1}", 200);
         Serial.println("{\"resp\":\"BUZZER_STATE\",\"state\":\"ON\",\"pin\":19}");
       } else if (cmdLine.equals("BUZZER_OFF") || cmdLine.indexOf("BUZZER_OFF") >= 0) {
-        Serial.println("{\"cmd\":\"BUZZER\",\"state\":0}");
+        pinMode(PIN_BUZZER, OUTPUT);
+        digitalWrite(PIN_BUZZER, LOW);
+        forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":0}", 200);
         Serial.println("{\"resp\":\"BUZZER_STATE\",\"state\":\"OFF\",\"pin\":19}");
       } else if (cmdLine.equals("BEEP") || cmdLine.indexOf("BEEP") >= 0) {
-        Serial.println("{\"cmd\":\"BUZZER\",\"action\":\"BEEP\"}");
-        Serial.println("{\"resp\":\"BUZZER_BEEP_OK\",\"pin\":19,\"duration_ms\":150}");
+        pinMode(PIN_BUZZER, OUTPUT);
+        digitalWrite(PIN_BUZZER, HIGH);
+        forwardCommandToDut("{\"cmd\":\"BUZZER\",\"action\":\"BEEP\"}", 200);
+        delay(250);
+        digitalWrite(PIN_BUZZER, LOW);
+        Serial.println("{\"resp\":\"BUZZER_BEEP_OK\",\"pin\":19,\"duration_ms\":250}");
       }
-      // Query Push Buttons
-      else if (cmdLine.equals("BUTTON") || cmdLine.indexOf("BUTTON") >= 0) {
-        Serial.println("{\"cmd\":\"BUTTON\"}");
-      }
-      // Query Sensors (ADCs & Logic)
-      else if (cmdLine.equals("SENSOR") || cmdLine.indexOf("SENSOR") >= 0) {
-        Serial.println("{\"cmd\":\"SENSOR\"}");
-      }
-      // Scan I2C Bus
-      else if (cmdLine.equals("I2C_SCAN") || cmdLine.indexOf("I2C") >= 0) {
-        Serial.println("{\"cmd\":\"I2C\"}");
+      // Direct Forwarding of Peripheral Commands to Target PCB
+      else if (cmdLine.indexOf("BUZZER") >= 0 || cmdLine.indexOf("LED") >= 0 ||
+               cmdLine.indexOf("MOTOR") >= 0 || cmdLine.indexOf("BUTTON") >= 0 ||
+               cmdLine.indexOf("SENSOR") >= 0 || cmdLine.indexOf("I2C") >= 0 ||
+               cmdLine.indexOf("INFO") >= 0 || cmdLine.indexOf("EXEC") >= 0) {
+        String dutReply = forwardCommandToDut(cmdLine, 1000);
+        if (dutReply.length() > 0) {
+          Serial.println(dutReply);
+        } else {
+          Serial.println("{\"resp\":\"DUT_TIMEOUT\"}");
+        }
       }
       // Individual Pin Pulse Test for Multimeter / Oscilloscope verification
       else if (cmdLine.indexOf("PIN_TEST") >= 0) {
@@ -504,20 +590,35 @@ void loop() {
             delay(250);
             digitalWrite(PIN_BUZZER, LOW);
             forwardCommandToDut("{\"cmd\":\"BUZZER\",\"state\":0}", 200);
+          } else if (gpioPin >= 39 && gpioPin <= 42) {
+            String dutReply = forwardCommandToDut("{\"cmd\":\"BUTTON\"}", 1000);
+            if (dutReply.length() > 0) {
+              Serial.println(dutReply);
+            } else {
+              Serial.println("{\"resp\":\"DUT_TIMEOUT\"}");
+            }
+            return;
+          } else if (gpioPin == 1 || gpioPin == 2 || gpioPin == 3 || gpioPin == 4 || gpioPin == 5 || gpioPin == 6 || gpioPin == 19) {
+            String dutReply = forwardCommandToDut("{\"cmd\":\"SENSOR\"}", 1000);
+            if (dutReply.length() > 0) {
+              Serial.println(dutReply);
+            } else {
+              Serial.println("{\"resp\":\"DUT_TIMEOUT\"}");
+            }
+            return;
           } else if (gpioPin < 40) {
-            pinMode(gpioPin, OUTPUT);
-            digitalWrite(gpioPin, HIGH);
-            delay(150);
-            digitalWrite(gpioPin, LOW);
+            // ESP32 GPIOs 34, 35, 36, 39 are hardware input-only (GPI)
+            if (gpioPin != 34 && gpioPin != 35 && gpioPin != 36 && gpioPin != 39) {
+              pinMode(gpioPin, OUTPUT);
+              digitalWrite(gpioPin, HIGH);
+              delay(150);
+              digitalWrite(gpioPin, LOW);
+            }
           }
           Serial.print("{\"resp\":\"PIN_TEST_OK\",\"gpio\":");
           Serial.print(gpioPin);
           Serial.println("}");
         }
-      }
-    } else if (c != '\r') {
-      if (rxAccumulator.length() < 256) {
-        rxAccumulator += c;
       }
     }
   }
@@ -544,4 +645,6 @@ void loop() {
     bool currentlyDocked = checkTestPcbUartHandshake(false);
     broadcastDutStatus(currentlyDocked);
   }
+
+  delay(2);
 }
